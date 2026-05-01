@@ -1,0 +1,49 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt6
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.6.*'
+          modules: 'qtwebengine qtwebchannel qtpositioning'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libgl1-mesa-dev
+
+      - name: Configure
+        run: cmake -B build -S . -GNinja -DAEGIS_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt6
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.6.*'
+          modules: 'qtwebengine qtwebchannel qtpositioning'
+
+      - name: Configure
+        run: cmake -B build -S . -DAEGIS_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -C Release

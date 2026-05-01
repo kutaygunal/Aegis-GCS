@@ -1,0 +1,1 @@
+{"id":"aegis.plugins.mission_editor","name":"Mission Editor","version":"1.0.0","author":"AEGIS Team","category":"Mission","permissions":["read:mission","write:mission","command:nav"],"min_api_version":"1.0"}

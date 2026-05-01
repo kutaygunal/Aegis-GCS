@@ -1,0 +1,62 @@
+#pragma once
+
+#include <QObject>
+#include <QThread>
+#include <QUdpSocket>
+#include <QHostAddress>
+#include <QTimer>
+#include <QQueue>
+#include <QMutex>
+#include "types/mavlink_types.hpp"
+
+namespace aegis::telemetry {
+
+/**
+ * @brief Dedicated I/O thread for MAVLink UDP reception and transmission.
+ *
+ * All socket operations run on a background QThread. Parsed messages are
+ * emitted via QueuedConnection to the TelemetryBus living on the main thread.
+ */
+class MavlinkIO : public QObject {
+    Q_OBJECT
+
+public:
+    explicit MavlinkIO(QObject* parent = nullptr);
+    ~MavlinkIO() override;
+
+    void start(const QHostAddress& bindAddress = QHostAddress::Any,
+               quint16 bindPort = 14550);
+    void stop();
+
+    bool isConnected() const { return m_running; }
+
+    /** @brief Enqueue a MAVLink message for transmission. Thread-safe. */
+    void sendMessage(const types::MavlinkMessage& msg);
+
+signals:
+    void messageReceived(const aegis::telemetry::types::MavlinkMessage& msg);
+    void connectionStateChanged(bool connected);
+    void parseError(const QString& reason);
+
+private slots:
+    void onReadyRead();
+    void onHeartbeatTimeout();
+    void processOutboundQueue();
+
+private:
+    void setupSocket();
+
+    QThread m_workerThread;
+    QUdpSocket* m_socket{nullptr};
+    QTimer* m_heartbeatTimer{nullptr};
+    QTimer* m_txTimer{nullptr};
+    bool m_running{false};
+
+    QMutex m_txMutex;
+    QQueue<types::MavlinkMessage> m_txQueue;
+
+    QHostAddress m_bindAddress;
+    quint16 m_bindPort{14550};
+};
+
+} // namespace aegis::telemetry

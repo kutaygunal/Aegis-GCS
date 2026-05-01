@@ -1,0 +1,9 @@
+{
+    "id": "aegis.plugins.telemetry_hud",
+    "name": "Telemetry HUD",
+    "version": "1.0.0",
+    "author": "AEGIS Team",
+    "category": "Flight",
+    "permissions": ["read:telemetry", "read:state"],
+    "min_api_version": "1.0"
+}

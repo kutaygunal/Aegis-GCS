@@ -1,0 +1,1 @@
+{"id":"aegis.plugins.alert_console","name":"Alert Console","version":"1.0.0","author":"AEGIS Team","category":"Diagnostics","permissions":["read:alerts"],"min_api_version":"1.0"}

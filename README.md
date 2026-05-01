@@ -1,6 +1,6 @@
 # AEGIS GCS
 
-**A**erospace **E**xtensible **G**round **C**ontrol **S**tation — A modular, plugin-based operator platform for UAS telemetry, mission planning, and real-time visualization.
+**A**erospace **E**xtensible **G**round **C**ontrol **S**tation — A modular, C++/Qt6-based operator platform for UAS telemetry, mission planning, and real-time visualization.
 
 > Built as a portfolio project demonstrating enterprise-grade application architecture for mission-critical aerospace software.
 
@@ -8,61 +8,63 @@
 
 ## Overview
 
-AEGIS GCS is a **Qt-based** (PySide6) desktop ground control station that ingests live MAVLink telemetry and exposes it to a dynamic, dockable UI workspace built on Qt's advanced docking and graphics frameworks. The core differentiator is its **runtime plugin architecture** — new capability panels (telemetry HUD, mapping, mission planning, alerting) can be loaded without recompiling the shell.
+AEGIS GCS is a **desktop Ground Control Station** written in **C++20** with **Qt6 Widgets**. It ingests live MAVLink telemetry via UDP and exposes data to a dynamic, dockable UI workspace built on Qt's advanced docking framework. The core differentiator is its **runtime plugin architecture** using `QPluginLoader` — new capability panels (
+Telemetry HUD, Map, Mission Editor, Alert Console) are compiled as shared libraries and loaded without recompiling the shell.
 
 This project targets the competencies expected of a senior Aerospace Application Software Engineer:
-- Modular, maintainable architecture across multiple subsystem interfaces
-- Real-time telemetry ingestion and multi-threaded data flow
-- Operator-centric UI/UX with configurable workflows
-- Geospatial visualization and mission planning
-- CI/CD, automated testing, and strict interface contracts
+- **Modular, maintainable architecture** across multiple subsystem interfaces
+- **Real-time telemetry** ingestion and multi-threaded data flow via Qt Signals & Slots
+- **Operator-centric UI/UX** with configurable, persistent dockable layouts
+- **Enterprise-grade plugin SDK** with interface contracts and sandboxed lifecycle
+- **Geospatial visualization** (CesiumJS via Qt WebEngine)
+- **CI/CD**, automated testing (GoogleTest), and strict interface contracts
 
 ---
 
 ## Architecture at a Glance
 
 ```
-┌─────────────────────────────────────────────┐
-│           AEGIS Shell (PySide6)             │
-│  ┌─────────┐ ┌─────────┐ ┌───────────────┐  │
-│  │  HUD    │ │   Map   │ │ Mission Editor│  │  ← Plugin Workspace
-│  │ Plugin  │ │ Plugin  │ │   Plugin      │  │    (dockable, hot-swappable)
-│  └─────────┘ └─────────┘ └───────────────┘  │
-├─────────────────────────────────────────────┤
-│         Plugin SDK (Interface Contracts)      │
-├─────────────────────────────────────────────┤
-│        Core Services (Bus / State / IO)       │
-│  • Telemetry Bus (thread-safe pub/sub)        │
-│  • Vehicle State Model                      │
-│  • MAVLink IO Manager                       │
-│  • Plugin Loader / Lifecycle Manager          │
-└─────────────────────────────────────────────┘
-                       │
-              ┌────────┴────────┐
-              │  MAVLink (UDP)  │
-              └─────────────────┘
-                       │
-          ┌────────────┴────────────┐
-      ┌───┴───┐                ┌────┴────┐
-   PX4 SITL   │                │  .tlog  │
-   (Gazebo)   │                │ Replay  │
-              └─────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                  AEGIS Shell (Qt6 Widgets)                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  ┌─────────┐ │
+│  │ Telemetry│  │Mission   │  │    Map       │  │  Alert  │ │
+│  │   HUD    │  │ Editor   │  │  (Cesium)    │  │ Console │ │
+│  │ (Plugin) │  │ (Plugin) │  │  (Plugin)    │  │(Plugin) │ │
+│  └────┬─────┘  └────┬─────┘  └──────┬───────┘  └────┬────┘ │
+│       │             │               │               │       │
+├───────┴─────────────┴───────────────┴───────────────┴───────┤
+│              Plugin SDK (IPlugin / QPluginLoader)           │
+├────────────────────────────────────────────────────────────┤
+│                    Core Services                              │
+│  • TelemetryBus (thread-safe pub/sub, Qt::QueuedConnection)│
+│  • VehicleState (canonical model, QReadWriteLock)            │
+│  • PluginHost (runtime discovery, error isolation)           │
+├────────────────────────────────────────────────────────────┤
+│                   Telemetry I/O                               │
+│  • MAVLinkIO (QUdpSocket on dedicated QThread)             │
+│  • MavlinkParser (demux → VehicleState updates)            │
+│  • LogReplay (.tlog file reader with speed control)          │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Shell & UI | Python 3.11 + PySide6 (Qt 6) |
-| Plugin SDK | Abstract Base Classes + runtime importlib |
-| Telemetry | MAVLink 2 (pymavlink) |
-| Mapping | Qt Location + Qt 3D / CesiumJS via Qt WebEngine |
-| State Bus | Qt Signals & Slots (Qt::QueuedConnection cross-thread) |
-| Storage | SQLite (log replay) |
-| Testing | pytest + pytest-qt + coverage |
-| CI/CD | GitHub Actions |
+| Layer           | Technology                                         |
+|-----------------|----------------------------------------------------|
+| Language        | C++20                                              |
+| Build System    | CMake ≥3.20                                        |
+| UI Framework    | Qt6 Widgets (PySide6 predecessor)                  |
+| Plugin System   | Qt `QPluginLoader` + `Q_INTERFACES`               |
+| Telemetry       | MAVLink 2 (C library)                               |
+| Mapping         | CesiumJS via `QWebEngineView` + `QWebChannel`   |
+| State Bus       | Qt Signals & Slots (`Qt::QueuedConnection`)       |
+| Threading       | `QThread`, `QReadWriteLock`, `QMutex`              |
+| Logging         | Thread-safe `Logger` singleton                     |
+| Collections     | `QHash`, `QMultiHash`, `QVector`, `QQueue`         |
+| Testing         | GoogleTest + Qt Test                                |
+| CI/CD           | GitHub Actions (Linux GCC, Windows MSVC)           |
 
 ---
 
@@ -70,44 +72,46 @@ This project targets the competencies expected of a senior Aerospace Application
 
 ```
 aegis-gcs/
-├── .github/workflows/     # CI/CD definitions
-├── config/                # MAVLink dialects, UI themes, keybindings
-├── docs/                  # Architecture Decision Records (ADRs), design docs
-│   ├── architecture.md
-│   └── adrs/
-├── scripts/               # Dev helpers (bootstrap, SITL launch)
-│   └── start_sitl.sh / .bat
-├── src/aegis/
+├── .github/workflows/           # CI/CD (Linux + Windows Qt6 builds)
+├── config/
+│   └── aegis.json               # Runtime plugin & telemetry config
+├── docs/
+│   └── architecture.md          # Full TDD with ADRs
+├── resources/
+│   └── resources.qrc            # Qt resource bundle
+├── src/
+│   ├── app/
+│   │   ├── application.hpp/.cpp # Bootstrapper + service wiring
+│   │   └── main.cpp             # Entry point
 │   ├── core/
-│   │   ├── __init__.py
-│   │   ├── bus.py           # TelemetryBus: thread-safe pub/sub
-│   │   ├── state.py         # VehicleState: unified data model
-│   │   ├── plugin_host.py   # PluginLoader + lifecycle
-│   │   └── interfaces.py    # IPlugin, ITelemetrySink, etc.
-│   ├── ui/
-│   │   ├── main_window.py   # Dockable workspace shell
-│   │   ├── dock_manager.py  # Drag/drop panel layout
-│   │   └── theme.py
+│   │   ├── interfaces/          # IPlugin, ITelemetrySink, ICommandSource
+│   │   ├── bus/                 # TelemetryBus (pub/sub, thread-safe)
+│   │   ├── state/               # VehicleState (canonical ground truth)
+│   │   ├── plugin_host/         # PluginHost, PluginMeta
+│   │   └── types/               # Common data structures + QMetaType regs
 │   ├── telemetry/
-│   │   ├── mavlink_io.py    # UDP/TCP MAVLink connection
-│   │   ├── parsers.py       # Message demux → state updates
-│   │   └── replay.py        # .tlog file reader
-│   ├── mapping/
-│   │   └── cesium_view.py   # Map viewport wrapper
+│   │   ├── mavlink_io.hpp/.cpp  # UDP RX/TX on background thread
+│   │   ├── parsers.hpp/.cpp     # MAVLink demux → State mutations
+│   │   ├── replay/              # LogReplay (.tlog playback)
+│   │   └── types/               # Normalized message envelope
+│   ├── ui/
+│   │   ├── main_window.hpp/.cpp # Dockable shell with menu/toolbar/status
+│   │   ├── dock_manager.hpp/.cpp# Plugin widget injection + tabify
+│   │   ├── theme/               # QSS dark theme + safety tokens
+│   │   └── widgets/             # Connection bar, status bar
 │   ├── plugins/
-│   │   ├── __init__.py
-│   │   ├── telemetry_hud/   # Example plugin
-│   │   ├── mission_editor/  # Example plugin
-│   │   └── alert_console/   # Example plugin
+│   │   ├── telemetry_hud/       # Real-time attitude / battery HUD
+│   │   ├── mission_editor/      # Waypoint table + upload capability
+│   │   └── alert_console/       # Severity-colored alert log
 │   └── utils/
-│       └── logging_config.py
+│       ├── logging.hpp/.cpp       # Structured crash-safe logger
+│       ├── ring_buffer.hpp      # Fixed-size telemetry history
+│       └── thread_pool.hpp/.cpp # QtConcurrent wrapper
 ├── tests/
-│   ├── unit/              # Core service tests
-│   └── integration/       # End-to-end telemetry → UI tests
-├── requirements.txt
-├── requirements-dev.txt
-├── pyproject.toml
-└── README.md
+│   ├── core/                    # TelemetryBus, VehicleState GTests
+│   └── utils/                   # RingBuffer tests
+├── CMakeLists.txt               # Root CMake (superbuild)
+└── README.md                    # This file
 ```
 
 ---
@@ -115,87 +119,90 @@ aegis-gcs/
 ## Quick Start
 
 ### Prerequisites
-- Python 3.11+
-- pip
+- C++20 compiler (GCC ≥11, Clang ≥14, or MSVC ≥2019)
+- CMake ≥3.20
+- Qt6.6+ (Core, Widgets, Network, WebEngineWidgets)
+- GoogleTest (for tests)
 
-### Install
+### Build
 ```bash
-git clone https://github.com/yourusername/aegis-gcs.git
-cd aegis-gcs
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements-dev.txt
+git clone https://github.com/kutaygunal/Aegis-GCS.git
+cd Aegis-GCS
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -DAEGIS_BUILD_TESTS=ON
+cmake --build . --parallel
 ```
 
-### Run with Simulated Telemetry
+### Run
 ```bash
-# Terminal 1 — Start PX4 SITL (requires Docker or PX4 toolchain)
-./scripts/start_sitl.sh
+# With live MAVLink (default UDP 14550)
+./aegis
 
-# Terminal 2 — Launch AEGIS
-python -m aegis
+# With log replay
+./aegis --replay /path/to/sample.tlog
 ```
 
-### Run with Log Replay
+### Run Tests
 ```bash
-python -m aegis --replay sample_mission.tlog
+cd build
+ctest --output-on-failure
 ```
 
 ---
 
 ## Plugin Development
 
-Plugins are self-contained packages that implement `IPlugin`.
+Plugins are **shared libraries** (`.so`/`.dll`) implementing `IPlugin`.
 
-```python
-# src/aegis/plugins/my_plugin/__init__.py
-from aegis.core.interfaces import IPlugin
-from PySide6.QtWidgets import QWidget
+```cpp
+// my_plugin.hpp
+#include "core/interfaces/iplugin.hpp"
 
-class MyPlugin(IPlugin):
-    name = "My Plugin"
-    version = "1.0.0"
-
-    def initialize(self, bus, state):
-        self._widget = QWidget()
-        # ... build UI
-        bus.subscribe("HEARTBEAT", self._on_heartbeat)
-
-    def widget(self) -> QWidget:
-        return self._widget
-
-    def shutdown(self):
-        pass
+class MyPlugin : public aegis::core::IPlugin {
+    Q_OBJECT
+    Q_PLUGIN_METADATA(IID "com.aegis.gcs.IPlugin/1.0" FILE "my_plugin.json")
+    Q_INTERFACES(aegis::core::IPlugin)
+public:
+    bool initialize(TelemetryBus* bus, VehicleState* state,
+                    const QVariantMap& config) override;
+    QWidget* widget() override;
+    void shutdown() override;
+    QString name() const override { return "My Plugin"; }
+    // ...
+};
 ```
 
-Drop the package into `src/aegis/plugins/` — AEGIS discovers it at runtime.
+Copy the compiled library into the `plugins/` directory — AEGIS discovers it automatically via `QPluginLoader` metadata.
 
 ---
 
-## Testing
+## Key Design Decisions
 
-```bash
-# Unit tests
-pytest tests/unit -v --cov=src/aegis --cov-report=html
-
-# Integration tests (requires SITL running)
-pytest tests/integration -v
-```
+| Decision | Rationale |
+|----------|-----------|
+| **C++20 over Python** | Required for real-time guarantees; job description lists C++ as core language alongside C# |
+| **Qt6 Widgets over QML** | Defense/aerospace GCS ecosystems are predominantly Widgets-based; matches enterprise codebase patterns |
+| **QPluginLoader over dynamic `dlopen`** | Qt-native error handling, metadata introspection, platform abstraction |
+| **Qt Signals for cross-thread bus** | Automatic `QueuedConnection` marshaling — eliminates manual condition-variable boilerplate |
+| **QReadWriteLock on VehicleState** | Allows concurrent reads by multiple plugins without serialization bottlenecks |
+| **Normalized types + MAVLink abstraction** | Enables future DDS/ZeroMQ backend swap with zero UI or plugin changes |
+| **GoogleTest over Qt Test alone** | Aerospace/defense industry standard; better CI tooling integration |
 
 ---
 
 ## Roadmap
 
-- [x] Repo scaffolding & architecture doc
-- [ ] Core telemetry bus + MAVLink I/O
-- [ ] Plugin SDK v1 (load, lifecycle, contracts)
-- [ ] Shell workspace with docking
-- [ ] Telemetry HUD plugin
-- [ ] Cesium mapping plugin
-- [ ] Mission editor plugin (waypoints, upload)
-- [ ] .tlog replay engine
-- [ ] CI/CD with GitHub Actions
-- [ ] ADR-001 through ADR-004
+- [x] C++20 / Qt6 CMake project scaffolding
+- [x] Core services: TelemetryBus, VehicleState, PluginHost
+- [x] Plugin SDK with QPluginLoader + 3 example plugins
+- [x] Qt6 dockable UI shell with dark theme
+- [x] MAVLink I/O abstraction + parser stubs
+- [x] GoogleTest harness + CI/CD
+- [ ] Full MAVLink C library integration (heartbeat, attitude, position)
+- [ ] CesiumJS mapping bridge via QWebChannel
+- [ ] SIL/HIL Docker Compose environment
+- [ ] DDS / ZeroMQ alternate telemetry backend
+- [ ] Mission file export (QGroundControl .plan compatibility)
 
 ---
 

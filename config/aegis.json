@@ -1,0 +1,16 @@
+{
+    "pluginPaths": ["./plugins", "C:/Program Files/Aegis/plugins"],
+    "autostartPlugins": [
+        "aegis.plugins.telemetry_hud",
+        "aegis.plugins.alert_console"
+    ],
+    "telemetry": {
+        "bindAddress": "0.0.0.0",
+        "bindPort": 14550,
+        "heartbeatTimeoutMs": 3000
+    },
+    "logging": {
+        "minLevel": "Debug",
+        "file": "aegis.log"
+    }
+}
