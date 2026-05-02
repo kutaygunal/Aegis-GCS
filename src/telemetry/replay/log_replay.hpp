@@ -5,9 +5,9 @@
 #include <QTimer>
 #include <QDateTime>
 
-namespace aegis::telemetry {
+namespace aegis::core { class TelemetryBus; }
 
-class TelemetryBus;
+namespace aegis::telemetry {
 
 /**
  * @brief Replays binary MAVLink log files (.tlog) into the TelemetryBus.
@@ -18,7 +18,7 @@ class LogReplay : public QObject {
     Q_OBJECT
 
 public:
-    explicit LogReplay(TelemetryBus* bus, QObject* parent = nullptr);
+    explicit LogReplay(aegis::core::TelemetryBus* bus, QObject* parent = nullptr);
     ~LogReplay() override;
 
     bool loadFile(const QString& path);
@@ -40,7 +40,7 @@ private slots:
     void onTick();
 
 private:
-    TelemetryBus* m_bus;
+    aegis::core::TelemetryBus* m_bus;
     QFile m_file;
     QTimer* m_timer{nullptr};
     bool m_playing{false};

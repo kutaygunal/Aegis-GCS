@@ -28,7 +28,7 @@ QList<PluginMeta> PluginHost::discover(const QStringList& searchPaths) {
 #endif
         };
         for (const QFileInfo& fi : dir.entryInfoList(filters, QDir::Files)) {
-            QScopedPointer<QPluginLoader> loader(new QPluginLoader(fi.absoluteFilePath()));
+            QPluginLoader* loader = new QPluginLoader(fi.absoluteFilePath());
             const QJsonObject meta = loader->metaData().value("MetaData").toObject();
 
             PluginMeta pm;
@@ -44,6 +44,7 @@ QList<PluginMeta> PluginHost::discover(const QStringList& searchPaths) {
 
             m_registry.insert(pm.pluginId, pm);
             results.append(pm);
+            loader->deleteLater();
         }
     }
     return results;
@@ -59,15 +60,17 @@ IPlugin* PluginHost::load(const QString& pluginId) {
     }
 
     const PluginMeta& meta = m_registry.value(pluginId);
-    QScopedPointer<QPluginLoader> loader(new QPluginLoader(meta.libraryPath));
+    QPluginLoader* loader = new QPluginLoader(meta.libraryPath);
     if (!loader->load()) {
         emit pluginCrashed(pluginId, loader->errorString());
+        delete loader;
         return nullptr;
     }
 
     QObject* obj = loader->instance();
     if (!obj) {
         emit pluginCrashed(pluginId, "QPluginLoader returned null instance");
+        delete loader;
         return nullptr;
     }
 
@@ -75,6 +78,7 @@ IPlugin* PluginHost::load(const QString& pluginId) {
     if (!plugin) {
         emit pluginCrashed(pluginId, "Library does not implement IPlugin");
         loader->unload();
+        delete loader;
         return nullptr;
     }
 
@@ -83,18 +87,20 @@ IPlugin* PluginHost::load(const QString& pluginId) {
         if (!ok) {
             emit pluginCrashed(pluginId, "initialize() returned false");
             loader->unload();
+            delete loader;
             return nullptr;
         }
     } catch (const std::exception& e) {
         emit pluginCrashed(pluginId, QString::fromUtf8(e.what()));
         loader->unload();
+        delete loader;
         return nullptr;
     }
 
     LoadedPlugin lp;
-    lp.loader.reset(loader.take());
+    lp.loader = loader;
     lp.instance = plugin;
-    m_active.insert(pluginId, std::move(lp));
+    m_active.insert(pluginId, lp);
 
     emit pluginLoaded(pluginId);
     qDebug() << "[PluginHost] Loaded:" << meta.displayName();
@@ -113,7 +119,10 @@ void PluginHost::unload(const QString& pluginId) {
                      << pluginId << ":" << e.what();
         }
     }
-    it.value().loader->unload();
+    if (it.value().loader) {
+        it.value().loader->unload();
+        delete it.value().loader;
+    }
     m_active.erase(it);
 
     emit pluginUnloaded(pluginId);

@@ -1,12 +1,12 @@
 #include "log_replay.hpp"
 #include "core/bus/telemetry_bus.hpp"
-#include "parsers.hpp"
+#include "../parsers.hpp"
 #include <QDataStream>
 #include <QDebug>
 
 namespace aegis::telemetry {
 
-LogReplay::LogReplay(TelemetryBus* bus, QObject* parent)
+LogReplay::LogReplay(aegis::core::TelemetryBus* bus, QObject* parent)
     : QObject(parent), m_bus(bus) {
     m_timer = new QTimer(this);
     m_timer->setInterval(10);  // 100 Hz tick for fine-grained timing

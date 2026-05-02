@@ -6,6 +6,7 @@
 #include "telemetry/parsers.hpp"
 #include "telemetry/replay/log_replay.hpp"
 #include "ui/main_window.hpp"
+#include "ui/dock_manager.hpp"
 #include "utils/logging.hpp"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -111,8 +112,9 @@ void Application::setupConnections() {
             this, &Application::onShutdown);
 
     connect(m_bus.data(), &aegis::core::TelemetryBus::connectionStateChanged,
-            this, [](bool connected) {
-        QString msg = connected ? "Connected" : "Disconnected";
+            this, [](aegis::core::types::ConnectionState state) {
+        QString msg = (state == aegis::core::types::ConnectionState::Connected)
+                          ? "Connected" : "Disconnected";
         aegis::utils::Logger::instance().log(
             aegis::utils::LogLevel::Info, "Link", msg);
     });

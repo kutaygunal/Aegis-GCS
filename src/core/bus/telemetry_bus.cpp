@@ -90,7 +90,7 @@ void TelemetryBus::dispatchTopic(const QString& topic, const QVariant& payload) 
     QReadLocker lock(&m_lock);
     auto range = m_subs.equal_range(topic);
     for (auto it = range.first; it != range.second; ++it) {
-        if (auto* obj = it.value().first; obj && !obj->isNull()) {
+        if (auto* obj = it.value().first; obj) {
             try {
                 it.value().second(payload);
             } catch (...) {

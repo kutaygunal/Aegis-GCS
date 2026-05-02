@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/interfaces/itelemetry_sink.hpp"
+#include "core/types/common.hpp"
 #include <QWidget>
 #include <QListWidget>
 

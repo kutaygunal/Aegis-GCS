@@ -15,37 +15,15 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 QUIET COMPONENTS Core Widgets Network WebEngineWidgets Qml)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network Qml Concurrent
+             OPTIONAL_COMPONENTS WebEngineWidgets)
 
 if(NOT Qt6_FOUND)
-    message(FATAL_ERROR 
-"Qt6 not found.
-
-Please install Qt6 and set the path before running CMake:
-    Windows (PowerShell):
-        cmake -B build -S . -DCMAKE_PREFIX_PATH='C:/Qt/6.8.2/msvc2022_64'
-    Or install Qt6 via aqtinstall:
-        pip install aqtinstall
-        aqt install-qt windows desktop 6.8.2 win64_msvc2022_64 --outputdir C:/Qt
-        cmake -B build -S . -DCMAKE_PREFIX_PATH='C:/Qt/6.8.2/msvc2022_64'
-
-    Linux:
-        sudo apt install qt6-base-dev qt6-webengine-dev libqt6widgets6
-        cmake -B build -S .
-
-    macOS:
-        brew install qt@6
-        cmake -B build -S . -DCMAKE_PREFIX_PATH=$(brew --prefix qt@6)
-")
+    message(FATAL_ERROR "Qt6 Core/Widgets/Network/Qml not found. Set CMAKE_PREFIX_PATH to your Qt6 installation.")
 endif()
-
-find_package(Qt6 REQUIRED COMPONENTS
-    Core
-    Widgets
-    Network
-    WebEngineWidgets
-    Qml
-)
+if(NOT TARGET Qt6::WebEngineWidgets)
+    message(WARNING "Qt6::WebEngineWidgets not found. Map plugin disabled.")
+endif()
 
 # ── Compiler flags ───────────────────────────────────────────────────
 if(MSVC)
@@ -81,8 +59,10 @@ target_link_libraries(aegis PRIVATE
     Qt6::Core
     Qt6::Widgets
     Qt6::Network
-    Qt6::WebEngineWidgets
 )
+if(TARGET Qt6::WebEngineWidgets)
+    target_link_libraries(aegis PRIVATE Qt6::WebEngineWidgets)
+endif()
 
 set_target_properties(aegis PROPERTIES
     WIN32_EXECUTABLE FALSE

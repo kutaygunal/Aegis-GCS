@@ -17,5 +17,8 @@ target_link_libraries(aegis_ui PUBLIC
     aegis_core
     Qt6::Core
     Qt6::Widgets
-    Qt6::WebEngineWidgets
 )
+if(TARGET Qt6::WebEngineWidgets)
+    target_link_libraries(aegis_ui PUBLIC Qt6::WebEngineWidgets)
+    target_compile_definitions(aegis_ui PUBLIC AEGIS_HAS_WEBENGINE)
+endif()

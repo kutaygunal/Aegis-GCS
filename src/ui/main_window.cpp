@@ -6,6 +6,8 @@
 #include <QMessageBox>
 #include <QDebug>
 
+#include <QLabel>
+
 namespace aegis::ui {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {

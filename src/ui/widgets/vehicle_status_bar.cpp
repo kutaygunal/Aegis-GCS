@@ -1,5 +1,5 @@
 #include "vehicle_status_bar.hpp"
-#include "theme/theme_engine.hpp"
+#include "../theme/theme_engine.hpp"
 #include <QHBoxLayout>
 
 namespace aegis::ui {

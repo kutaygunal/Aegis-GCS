@@ -69,7 +69,7 @@ private:
 
     // pluginId -> {loader, instance}
     struct LoadedPlugin {
-        QScopedPointer<QPluginLoader> loader;
+        QPluginLoader* loader{nullptr};
         IPlugin* instance{nullptr};
     };
     QHash<QString, LoadedPlugin> m_active;

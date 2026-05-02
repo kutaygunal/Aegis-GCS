@@ -8,7 +8,8 @@
 
 namespace aegis::telemetry {
 
-MavlinkParser::MavlinkParser(TelemetryBus* bus, VehicleState* state,
+MavlinkParser::MavlinkParser(aegis::core::TelemetryBus* bus,
+                             aegis::core::VehicleState* state,
                              QObject* parent)
     : QObject(parent), m_bus(bus), m_state(state) {}
 
@@ -30,7 +31,7 @@ void MavlinkParser::parseHeartbeat(const types::MavlinkMessage& msg) {
     core::types::SystemState state;
     // TODO: decode MAVLink HEARTBEAT into state fields
     Q_UNUSED(msg)
-    state.systemStatus = core::types::SystemStatus::Active;  // placeholder
+    state.status = core::types::SystemStatus::Active;  // placeholder
     m_state->updateSystemState(state);
     m_bus->emitHeartbeat(state);
 }

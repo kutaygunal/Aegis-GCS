@@ -7,4 +7,4 @@ add_library(aegis_utils STATIC
 )
 
 target_include_directories(aegis_utils PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(aegis_utils PUBLIC Qt6::Core)
+target_link_libraries(aegis_utils PUBLIC Qt6::Core Qt6::Concurrent)
