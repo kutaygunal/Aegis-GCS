@@ -57,7 +57,8 @@ bool Application::initialize() {
     // ── Plugin discovery ──────────────────────────────────────────────
     QStringList pluginPaths = m_config.value("pluginPaths").toStringList();
     if (pluginPaths.isEmpty()) {
-        pluginPaths << QDir::currentPath() + "/plugins";
+        pluginPaths << QCoreApplication::applicationDirPath() + "/plugins";
+        pluginPaths << QDir::currentPath() + "/plugins";  // fallback
     }
     auto discovered = m_pluginHost->discover(pluginPaths);
     qDebug() << "[Application] Discovered" << discovered.size() << "plugins";

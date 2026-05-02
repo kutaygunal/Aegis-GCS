@@ -69,6 +69,22 @@ set_target_properties(aegis PROPERTIES
     MACOSX_BUNDLE FALSE
 )
 
+# ── Automatic deployment (Qt DLLs) ────────────────────────────────────
+if(WIN32)
+    find_program(WINDEPLOYQT_EXECUTABLE windeployqt
+        PATHS "${Qt6Core_DIR}/../../../bin"
+    )
+    if(WINDEPLOYQT_EXECUTABLE)
+        add_custom_command(TARGET aegis POST_BUILD
+            COMMAND "${WINDEPLOYQT_EXECUTABLE}"
+                    "$<TARGET_FILE:aegis>"
+                    --no-translations
+                    --no-compiler-runtime
+            COMMENT "Deploying Qt runtime dependencies..."
+        )
+    endif()
+endif()
+
 # ── Plugins ─────────────────────────────────────────────────────────
 if(AEGIS_BUILD_PLUGINS)
     add_subdirectory(src/plugins/telemetry_hud)
