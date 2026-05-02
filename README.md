@@ -55,7 +55,7 @@ This project targets the competencies expected of a senior Aerospace Application
 |-----------------|----------------------------------------------------|
 | Language        | C++20                                              |
 | Build System    | CMake ≥3.20                                        |
-| UI Framework    | Qt6 Widgets (PySide6 predecessor)                  |
+| UI Framework    | Qt6 Widgets (native C++)                           |
 | Plugin System   | Qt `QPluginLoader` + `Q_INTERFACES`               |
 | Telemetry       | MAVLink 2 (C library)                               |
 | Mapping         | CesiumJS via `QWebEngineView` + `QWebChannel`   |
@@ -129,11 +129,11 @@ aegis-gcs/
 If you don't have Qt6 installed, use **aqtinstall** (no Qt account required):
 
 ```powershell
-# 1. Install aqtinstall
-pip install aqtinstall
+# 1. Install aqtinstall (requires Python)
+python -m pip install aqtinstall
 
 # 2. Download Qt6.8.2 for MSVC 2022 (~2.5GB with WebEngine)
-aqt install-qt windows desktop 6.8.2 win64_msvc2022_64 --outputdir C:\Qt -m qtwebengine
+python -m aqt install-qt windows desktop 6.8.2 win64_msvc2022_64 --outputdir C:\Qt -m qtwebengine
 
 # 3. Configure with Qt path
 mkdir build
@@ -210,7 +210,7 @@ Copy the compiled library into the `plugins/` directory — AEGIS discovers it a
 
 | Decision | Rationale |
 |----------|-----------|
-| **C++20 over Python** | Required for real-time guarantees; job description lists C++ as core language alongside C# |
+| **C++20** | Required for real-time guarantees; job description lists C++ as core language alongside C# |
 | **Qt6 Widgets over QML** | Defense/aerospace GCS ecosystems are predominantly Widgets-based; matches enterprise codebase patterns |
 | **QPluginLoader over dynamic `dlopen`** | Qt-native error handling, metadata introspection, platform abstraction |
 | **Qt Signals for cross-thread bus** | Automatic `QueuedConnection` marshaling — eliminates manual condition-variable boilerplate |
