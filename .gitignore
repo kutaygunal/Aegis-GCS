@@ -1,17 +1,52 @@
-# Build artifacts
+# ── Build directories ───────────────────────────────────────────────
 build/
 build_*/
 cmake-build-*/
 out/
+bin/
+lib/
+
+# ── CMake generated ─────────────────────────────────────────────────
 CMakeCache.txt
 CMakeFiles/
+CMakeScripts/
 cmake_install.cmake
+CTestTestfile.cmake
 Makefile
 compile_commands.json
-CTestTestfile.cmake
-*.cbp
+compile_commands.events.json
+*.cmake
+!CMakeLists.txt
+!*.cmake.in
 
-# Qt
+# ── Visual Studio ───────────────────────────────────────────────────
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.suo
+*.sdf
+*.opensdf
+*.ipch
+*.obj
+*.pch
+*.lib
+*.exp
+*.ilk
+*.pdb
+*.idb
+*.tlog/
+*.lastbuildstate
+ipch/
+.vs/
+x64/
+Win32/
+Debug/
+Release/
+RelWithDebInfo/
+MinSizeRel/
+
+# ── Qt / moc / rcc generated ───────────────────────────────────────
 *.pro.user
 *.pro.user.*
 .qmake.stash
@@ -22,8 +57,9 @@ qrc_*.cpp
 ui_*.h
 *.qmlc
 *.jsc
+.qtc_clangd/
 
-# IDE
+# ── IDE ─────────────────────────────────────────────────────────────
 .idea/
 *.iml
 .vscode/
@@ -31,25 +67,30 @@ ui_*.h
 *.swo
 *~
 
-# OS
+# ── OS ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Binaries
-*.so
-*.dll
-*.dylib
-*.exe
-*.app
-
-# Logs
-*.log
-
-# Package managers
+# ── Package managers ────────────────────────────────────────────────
 vcpkg_installed/
 conan.lock
 conanbuildinfo.*
+conaninfo.txt
+graph_info.json
 
-# Qt Deploy
+# ── Qt deploy artifacts ─────────────────────────────────────────────
 *_deploy/
+*.qm
+translations/
+generic/
+iconengines/
+imageformats/
+platforms/
+styles/
+tls/
+networkinformation/
+
+# ── Logs ────────────────────────────────────────────────────────────
+*.log
+aqtinstall.log
