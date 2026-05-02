@@ -2,6 +2,7 @@
 #include "core/bus/telemetry_bus.hpp"
 #include "core/state/vehicle_state.hpp"
 #include "core/plugin_host/plugin_host.hpp"
+#include "core/interfaces/iplugin.hpp"
 #include "telemetry/mavlink_io.hpp"
 #include "telemetry/parsers.hpp"
 #include "telemetry/replay/log_replay.hpp"
@@ -10,10 +11,13 @@
 #include "utils/logging.hpp"
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QFile>
 #include <QDir>
 #include <QStandardPaths>
 #include <QDebug>
+#include <QTimer>
+#include <QtMath>
 
 namespace aegis::app {
 
@@ -31,6 +35,11 @@ Application::~Application() {
 bool Application::initialize() {
     if (!loadConfiguration()) {
         qWarning() << "[Application] Using default configuration";
+        // Set fallback autostart plugins if no config file
+        m_config.insert("autostartPlugins", QStringList()
+            << "aegis.plugins.telemetry_hud"
+            << "aegis.plugins.alert_console"
+            << "aegis.plugins.mission_editor");
     }
 
     // ── Core services ─────────────────────────────────────────────────
@@ -38,6 +47,9 @@ bool Application::initialize() {
     m_state.reset(new aegis::core::VehicleState(this));
     m_pluginHost.reset(new aegis::core::PluginHost(
         m_bus.data(), m_state.data(), m_config.value("plugins").toMap(), this));
+
+    connect(m_pluginHost.data(), &aegis::core::PluginHost::pluginLoaded,
+            this, &Application::onPluginLoaded);
 
     // ── Telemetry layer ───────────────────────────────────────────────
     m_mavlinkIO.reset(new aegis::telemetry::MavlinkIO(this));
@@ -64,11 +76,18 @@ bool Application::initialize() {
     qDebug() << "[Application] Discovered" << discovered.size() << "plugins";
 
     // Auto-load plugins marked as "autostart"
+    QStringList autostart = m_config.value("autostartPlugins").toStringList();
     for (const auto& meta : discovered) {
-        if (m_config.value("autostartPlugins").toStringList().contains(meta.pluginId)) {
+        if (autostart.contains(meta.pluginId)) {
             m_pluginHost->load(meta.pluginId);
         }
     }
+
+    // ── Dummy telemetry generator (for demo when no vehicle is connected) ─
+    QTimer* dummyTimer = new QTimer(this);
+    connect(dummyTimer, &QTimer::timeout, this, &Application::emitDummyTelemetry);
+    dummyTimer->start(100);  // 10 Hz
+    m_dummyTimer.reset(dummyTimer);
 
     aegis::utils::Logger::instance().setMinLevel(aegis::utils::LogLevel::Debug);
     aegis::utils::Logger::instance().log(
@@ -137,6 +156,51 @@ void Application::onPluginLoadRequested(const QString& pluginId) {
     if (auto* plugin = m_pluginHost->load(pluginId)) {
         m_mainWindow->dockManager()->injectPlugin(plugin);
     }
+}
+
+void Application::onPluginLoaded(const QString& pluginId) {
+    for (auto* p : m_pluginHost->activePlugins()) {
+        if (p->pluginId() == pluginId) {
+            m_mainWindow->dockManager()->injectPlugin(p);
+            qDebug() << "[Application] Injected" << pluginId;
+            break;
+        }
+    }
+}
+
+void Application::emitDummyTelemetry() {
+    static qreal t = 0.0;
+    t += 0.1;
+
+    aegis::core::types::AttitudeData attitude;
+    attitude.roll  = qSin(t) * 0.5;
+    attitude.pitch = qCos(t * 0.7) * 0.3;
+    attitude.yaw   = t;
+    attitude.timestamp = QDateTime::currentDateTimeUtc();
+
+    aegis::core::types::PositionData position;
+    position.lat = 377000000 + static_cast<qint32>(qSin(t * 0.1) * 500000);
+    position.lon = -1220000000 + static_cast<qint32>(qCos(t * 0.1) * 500000);
+    position.relativeAlt = static_cast<qint32>(qSin(t * 0.3) * 10000);
+    position.timestamp = QDateTime::currentDateTimeUtc();
+
+    aegis::core::types::BatteryData battery;
+    battery.remaining = 80 + static_cast<qint8>(qSin(t * 0.05) * 15);
+    battery.voltageV = 14.8 + qSin(t * 0.2) * 0.5;
+
+    aegis::core::types::SystemState state;
+    state.status = aegis::core::types::SystemStatus::Active;
+    state.armed = true;
+
+    m_state->updateAttitude(attitude);
+    m_state->updatePosition(position);
+    m_state->updateBattery(battery);
+    m_state->updateSystemState(state);
+
+    m_bus->emitAttitudeChanged(attitude);
+    m_bus->emitPositionChanged(position);
+    m_bus->emitBatteryChanged(battery);
+    m_bus->emitHeartbeat(state);
 }
 
 void Application::onShutdown() {

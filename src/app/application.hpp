@@ -5,6 +5,8 @@
 #include <QVariantMap>
 
 // Forward declarations
+class QTimer;
+
 namespace aegis::core {
     class TelemetryBus;
     class VehicleState;
@@ -47,6 +49,8 @@ private slots:
     void onConnectionRequested(const QString& host, quint16 port);
     void onReplayRequested(const QString& filePath);
     void onPluginLoadRequested(const QString& pluginId);
+    void onPluginLoaded(const QString& pluginId);
+    void emitDummyTelemetry();
     void onShutdown();
 
 private:
@@ -60,6 +64,7 @@ private:
     QScopedPointer<aegis::telemetry::MavlinkParser> m_mavlinkParser;
     QScopedPointer<aegis::telemetry::LogReplay> m_logReplay;
     QScopedPointer<aegis::ui::MainWindow> m_mainWindow;
+    QScopedPointer<QTimer> m_dummyTimer;
 
     QVariantMap m_config;
     bool m_initialized{false};
