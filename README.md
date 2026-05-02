@@ -119,10 +119,14 @@ aegis-gcs/
 ## Quick Start
 
 ### Prerequisites
-- C++20 compiler (GCC ≥11, Clang ≥14, or **MSVC ≥2019**)
-- CMake ≥3.20
-- **Qt6.6+** — Core, Widgets, Network, WebEngineWidgets
-- GoogleTest (for tests)
+
+| Component | Version | Notes |
+|-----------|---------|-------|
+| C++ Compiler | MSVC 2019+, GCC 11+, Clang 14+ | C++20 required |
+| CMake | ≥ 3.20 | |
+| Qt6 | 6.6+ | Core, Widgets, Network, Qml, Concurrent |
+| Qt6 WebEngine | 6.6+ | **Optional** — only needed for map plugin |
+| GoogleTest | latest | **Optional** — only needed for tests |
 
 ### Windows (Visual Studio 2022)
 
@@ -132,20 +136,21 @@ If you don't have Qt6 installed, use **aqtinstall** (no Qt account required):
 # 1. Install aqtinstall (requires Python)
 python -m pip install aqtinstall
 
-# 2. Download Qt6.8.2 for MSVC 2022 (~2.5GB with WebEngine)
+# 2. Download Qt6.8.2 for MSVC 2022 (~2.5GB with WebEngine; skip -m qtwebengine if you don't need the map plugin)
 python -m aqt install-qt windows desktop 6.8.2 win64_msvc2022_64 --outputdir C:\Qt -m qtwebengine
 
 # 3. Configure with Qt path
 mkdir build
-cmake -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.8.2/msvc2022_64" -DAEGIS_BUILD_TESTS=ON
+cmake -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.8.2/msvc2022_64" -DAEGIS_BUILD_TESTS=OFF
 
 # 4. Build (Release)
 cmake --build build --config Release --parallel
 
-# 5. Run tests
-cd build
-ctest --output-on-failure -C Release
+# 5. Run
+.\build\Release\aegis.exe
 ```
+
+> **No manual DLL copying.** `windeployqt` runs automatically as a post-build step. Custom plugins are also copied to `build/Release/plugins/` automatically.
 
 ### Linux (Ubuntu/Debian)
 
@@ -153,8 +158,13 @@ ctest --output-on-failure -C Release
 # Install Qt6 from package manager
 sudo apt update
 sudo apt install -y cmake ninja-build build-essential \
-    qt6-base-dev qt6-webengine-dev libqt6widgets6 \
-    libgtest-dev
+    qt6-base-dev libqt6widgets6
+
+# Optional: WebEngine for map plugin
+sudo apt install -y qt6-webengine-dev
+
+# Optional: tests
+sudo apt install -y libgtest-dev
 
 # Build
 mkdir build && cd build
@@ -163,20 +173,59 @@ cmake --build . --parallel
 ctest --output-on-failure
 ```
 
+### macOS (Homebrew)
+
+```bash
+# Install dependencies
+brew install cmake qt@6
+
+# Build
+mkdir build && cd build
+cmake .. -DCMAKE_PREFIX_PATH=$(brew --prefix qt@6) \
+         -DCMAKE_BUILD_TYPE=Release \
+         -DAEGIS_BUILD_TESTS=OFF
+cmake --build . --parallel
+
+# Run
+./aegis
+```
+
 ### Run
 ```bash
-# With live MAVLink (default UDP 14550)
-./aegis
+# Windows
+.\build\Release\aegis.exe
 
-# With log replay
-./aegis --replay /path/to/sample.tlog
+# Linux / macOS
+./build/aegis
 ```
 
-### Run Tests
+### What happens automatically after each build
+
+| Step | Trigger | Output |
+|------|---------|--------|
+| `windeployqt` (Windows) | `aegis.exe` links successfully | Qt6 DLLs + platform plugins copied to `Release/` |
+| Plugin copy (all platforms) | Each plugin links successfully | Custom plugins copied to executable's `plugins/` dir |
+
+After any source change, simply rebuild and run — no extra steps:
+
 ```bash
-cd build
-ctest --output-on-failure
+# Windows
+cmake --build build --config Release --parallel
+.\build\Release\aegis.exe
+
+# Linux / macOS
+cmake --build build --parallel
+./build/aegis
 ```
+
+### Troubleshooting
+
+| Error | Fix |
+|-------|-----|
+| `Qt6 not found` during configure | Set `-DCMAKE_PREFIX_PATH` to your Qt installation, e.g. `C:/Qt/6.8.2/msvc2022_64` |
+| `Qt platform plugin could not be initialized` | Missing `platforms/*.dll`. The post-build `windeployqt` step handles this automatically; rebuild from a clean `build/` directory |
+| Plugins not loading at runtime | Verify `plugins/` directory exists next to the executable and contains `telemetry_hud.dll` (or `.so`/`.dylib`) |
+| `GoogleTest not found` | Tests are skipped automatically. Install GTest to enable them: `vcpkg install gtest` (Windows) or `sudo apt install libgtest-dev` (Linux) |
 
 ---
 
