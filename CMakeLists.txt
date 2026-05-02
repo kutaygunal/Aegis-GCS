@@ -15,6 +15,30 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
+find_package(Qt6 QUIET COMPONENTS Core Widgets Network WebEngineWidgets Qml)
+
+if(NOT Qt6_FOUND)
+    message(FATAL_ERROR 
+"Qt6 not found.
+
+Please install Qt6 and set the path before running CMake:
+    Windows (PowerShell):
+        cmake -B build -S . -DCMAKE_PREFIX_PATH='C:/Qt/6.8.2/msvc2022_64'
+    Or install Qt6 via aqtinstall:
+        pip install aqtinstall
+        aqt install-qt windows desktop 6.8.2 win64_msvc2022_64 --outputdir C:/Qt
+        cmake -B build -S . -DCMAKE_PREFIX_PATH='C:/Qt/6.8.2/msvc2022_64'
+
+    Linux:
+        sudo apt install qt6-base-dev qt6-webengine-dev libqt6widgets6
+        cmake -B build -S .
+
+    macOS:
+        brew install qt@6
+        cmake -B build -S . -DCMAKE_PREFIX_PATH=$(brew --prefix qt@6)
+")
+endif()
+
 find_package(Qt6 REQUIRED COMPONENTS
     Core
     Widgets
@@ -75,8 +99,15 @@ endif()
 # ── Tests ───────────────────────────────────────────────────────────
 if(AEGIS_BUILD_TESTS)
     enable_testing()
-    find_package(GTest REQUIRED)
-    add_subdirectory(tests)
+    find_package(GTest QUIET)
+    if(NOT GTest_FOUND)
+        message(WARNING "GoogleTest not found. Tests will not be built. "
+                        "Install it: vcpkg install gtest, or "
+                        "https://github.com/google/googletest")
+        set(AEGIS_BUILD_TESTS OFF)
+    else()
+        add_subdirectory(tests)
+    endif()
 endif()
 
 # ── Install ──────────────────────────────────────────────────────────

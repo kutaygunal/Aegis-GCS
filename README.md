@@ -119,18 +119,48 @@ aegis-gcs/
 ## Quick Start
 
 ### Prerequisites
-- C++20 compiler (GCC ≥11, Clang ≥14, or MSVC ≥2019)
+- C++20 compiler (GCC ≥11, Clang ≥14, or **MSVC ≥2019**)
 - CMake ≥3.20
-- Qt6.6+ (Core, Widgets, Network, WebEngineWidgets)
+- **Qt6.6+** — Core, Widgets, Network, WebEngineWidgets
 - GoogleTest (for tests)
 
-### Build
+### Windows (Visual Studio 2022)
+
+If you don't have Qt6 installed, use **aqtinstall** (no Qt account required):
+
+```powershell
+# 1. Install aqtinstall
+pip install aqtinstall
+
+# 2. Download Qt6.8.2 for MSVC 2022 (~2.5GB with WebEngine)
+aqt install-qt windows desktop 6.8.2 win64_msvc2022_64 --outputdir C:\Qt -m qtwebengine
+
+# 3. Configure with Qt path
+mkdir build
+cmake -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.8.2/msvc2022_64" -DAEGIS_BUILD_TESTS=ON
+
+# 4. Build (Release)
+cmake --build build --config Release --parallel
+
+# 5. Run tests
+cd build
+ctest --output-on-failure -C Release
+```
+
+### Linux (Ubuntu/Debian)
+
 ```bash
-git clone https://github.com/kutaygunal/Aegis-GCS.git
-cd Aegis-GCS
+# Install Qt6 from package manager
+sudo apt update
+sudo apt install -y cmake ninja-build build-essential \
+    qt6-base-dev qt6-webengine-dev libqt6widgets6 \
+    libgtest-dev
+
+# Build
 mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DAEGIS_BUILD_TESTS=ON
+cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release -DAEGIS_BUILD_TESTS=ON
 cmake --build . --parallel
+ctest --output-on-failure
 ```
 
 ### Run
