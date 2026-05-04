@@ -31,12 +31,15 @@ private:
     aegis::core::TelemetryBus* m_bus;
     aegis::core::VehicleState* m_state;
 
-    void parseHeartbeat(const types::MavlinkMessage& msg);
-    void parseAttitude(const types::MavlinkMessage& msg);
-    void parseGlobalPosition(const types::MavlinkMessage& msg);
-    void parseBatteryStatus(const types::MavlinkMessage& msg);
-    void parseMissionCurrent(const types::MavlinkMessage& msg);
-    void parseStatusText(const types::MavlinkMessage& msg);
+    void parseHeartbeat(const mavlink_message_t& msg);
+    void parseAttitude(const mavlink_message_t& msg);
+    void parseGlobalPosition(const mavlink_message_t& msg);
+    void parseBatteryStatus(const mavlink_message_t& msg);
+    void parseMissionCurrent(const mavlink_message_t& msg);
+    void parseStatusText(const mavlink_message_t& msg);
+
+    static core::types::SystemStatus mapMavState(uint8_t mavState);
+    static core::types::AlertLevel mapSeverity(uint8_t severity);
 };
 
 } // namespace aegis::telemetry

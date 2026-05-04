@@ -1,21 +1,23 @@
 #pragma once
 
 #include <QDateTime>
+#include <mavlink.h>
 
 namespace aegis::telemetry::types {
 
 /**
- * @brief Normalized MAVLink message envelope.
+ * @brief MAVLink message envelope carrying the parsed C library struct.
  *
- * Decouples the rest of the system from the concrete MAVLink dialect,
- * enabling SIL/HIL log replay and future DDS/ZeroMQ backends.
+ * The mavlink_message_t struct is safely copyable (plain C data)
+ * and carries all fields needed for decoding via mavlink_msg_*_decode().
  */
 struct MavlinkMessage {
-    quint8  sysid{0};
-    quint8  compid{0};
-    quint32 msgid{0};
+    mavlink_message_t raw{};
     QDateTime timestamp;
-    QByteArray payload;
+
+    uint8_t sysid() const    { return raw.sysid; }
+    uint8_t compid() const   { return raw.compid; }
+    uint32_t msgid() const     { return raw.msgid; }
 };
 
 } // namespace aegis::telemetry::types

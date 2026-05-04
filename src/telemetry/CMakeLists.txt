@@ -10,7 +10,7 @@ add_library(aegis_telemetry STATIC
 
 target_include_directories(aegis_telemetry PUBLIC
     ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/third_party  # MAVLink C library
+    ${CMAKE_SOURCE_DIR}/third_party/mavlink/common  # MAVLink C library headers
 )
 
 target_link_libraries(aegis_telemetry PUBLIC

@@ -1,4 +1,6 @@
 #include "mavlink_io.hpp"
+#include "types/mavlink_types.hpp"
+#include <mavlink.h>
 #include <QDebug>
 #include <QNetworkDatagram>
 
@@ -46,7 +48,7 @@ void MavlinkIO::setupSocket() {
     m_heartbeatTimer->start();
 
     m_txTimer = new QTimer(this);
-    m_txTimer->setInterval(20);  // 50 Hz max TX
+    m_txTimer->setInterval(20);
     connect(m_txTimer, &QTimer::timeout, this, &MavlinkIO::processOutboundQueue);
     m_txTimer->start();
 
@@ -57,21 +59,28 @@ void MavlinkIO::setupSocket() {
 }
 
 void MavlinkIO::onReadyRead() {
+    static mavlink_status_t status;
+    static mavlink_message_t msg;
+
     while (m_socket->hasPendingDatagrams()) {
         QNetworkDatagram dgram = m_socket->receiveDatagram();
-        types::MavlinkMessage msg;
-        msg.timestamp = QDateTime::currentDateTimeUtc();
-        msg.payload = dgram.data();
-        // TODO: parse sysid/compid/msgid from MAVLink framing
-        emit messageReceived(msg);
+        const QByteArray data = dgram.data();
+
+        for (char c : data) {
+            if (mavlink_parse_char(MAVLINK_COMM_0,
+                                   static_cast<uint8_t>(c),
+                                   &msg, &status)) {
+                types::MavlinkMessage out;
+                out.raw = msg;
+                out.timestamp = QDateTime::currentDateTimeUtc();
+                emit messageReceived(out);
+            }
+        }
     }
 }
 
 void MavlinkIO::onHeartbeatTimeout() {
-    // If no heartbeat received in 3s, mark disconnected
-    if (m_running) {
-        // TODO: implement actual timeout tracking per-system
-    }
+    // TODO: implement actual timeout tracking per-system
 }
 
 void MavlinkIO::processOutboundQueue() {
