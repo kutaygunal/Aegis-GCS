@@ -8,6 +8,7 @@
 #include <QQueue>
 #include <QMutex>
 #include "types/mavlink_types.hpp"
+#include "core/types/common.hpp"
 
 namespace aegis::telemetry {
 
@@ -33,6 +34,12 @@ public:
     /** @brief Enqueue a MAVLink message for transmission. Thread-safe. */
     void sendMessage(const types::MavlinkMessage& msg);
 
+    /** @brief Enqueue a normalized vehicle command for MAVLink encoding. Thread-safe. */
+    void sendCommand(const aegis::core::types::VehicleCommand& cmd);
+
+    /** @brief Set the remote target address for outbound messages (auto-detected from first RX). */
+    void setRemoteAddress(const QHostAddress& addr, quint16 port = 14550);
+
 signals:
     void messageReceived(const aegis::telemetry::types::MavlinkMessage& msg);
     void connectionStateChanged(bool connected);
@@ -54,6 +61,10 @@ private:
 
     QMutex m_txMutex;
     QQueue<types::MavlinkMessage> m_txQueue;
+
+    QHostAddress m_remoteAddress;
+    quint16 m_remotePort{14550};
+    bool m_remoteKnown{false};
 
     QHostAddress m_bindAddress;
     quint16 m_bindPort{14550};

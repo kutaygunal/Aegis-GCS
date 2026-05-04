@@ -138,6 +138,10 @@ void Application::setupConnections() {
         aegis::utils::Logger::instance().log(
             aegis::utils::LogLevel::Info, "Link", msg);
     });
+
+    connect(m_bus.data(), &aegis::core::TelemetryBus::outboundCommand,
+            m_mavlinkIO.data(), &aegis::telemetry::MavlinkIO::sendCommand,
+            Qt::QueuedConnection);
 }
 
 void Application::onConnectionRequested(const QString& host, quint16 port) {

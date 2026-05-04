@@ -1,5 +1,6 @@
 #include "mavlink_io.hpp"
 #include "types/mavlink_types.hpp"
+#include "core/types/common.hpp"
 #include <mavlink.h>
 #include <QDebug>
 #include <QNetworkDatagram>
@@ -30,6 +31,35 @@ void MavlinkIO::stop() {
 void MavlinkIO::sendMessage(const types::MavlinkMessage& msg) {
     QMutexLocker lock(&m_txMutex);
     m_txQueue.enqueue(msg);
+}
+
+void MavlinkIO::sendCommand(const aegis::core::types::VehicleCommand& cmd) {
+    mavlink_message_t msg{};
+    mavlink_msg_command_long_pack(
+        cmd.targetSystem,
+        cmd.targetComponent,
+        &msg,
+        cmd.targetSystem,
+        cmd.targetComponent,
+        cmd.commandId,
+        0,  // confirmation
+        cmd.params[0], cmd.params[1], cmd.params[2], cmd.params[3],
+        cmd.params[4], cmd.params[5], cmd.params[6]);
+
+    types::MavlinkMessage out;
+    out.raw = msg;
+    out.timestamp = QDateTime::currentDateTimeUtc();
+
+    QMutexLocker lock(&m_txMutex);
+    m_txQueue.enqueue(out);
+}
+
+void MavlinkIO::setRemoteAddress(const QHostAddress& addr, quint16 port) {
+    QMutexLocker<QMutex> lock(&m_txMutex);
+    m_remoteAddress = addr;
+    m_remotePort = port;
+    m_remoteKnown = true;
+    qDebug() << "[MavlinkIO] Remote target set to" << addr.toString() << ":" << port;
 }
 
 void MavlinkIO::setupSocket() {
@@ -66,6 +96,11 @@ void MavlinkIO::onReadyRead() {
         QNetworkDatagram dgram = m_socket->receiveDatagram();
         const QByteArray data = dgram.data();
 
+        // Auto-detect remote address from first incoming datagram
+        if (!m_remoteKnown && !dgram.senderAddress().isNull()) {
+            setRemoteAddress(dgram.senderAddress(), dgram.senderPort());
+        }
+
         for (char c : data) {
             if (mavlink_parse_char(MAVLINK_COMM_0,
                                    static_cast<uint8_t>(c),
@@ -85,10 +120,26 @@ void MavlinkIO::onHeartbeatTimeout() {
 
 void MavlinkIO::processOutboundQueue() {
     QMutexLocker lock(&m_txMutex);
+    if (!m_socket || !m_socket->isOpen()) return;
+
     while (!m_txQueue.isEmpty()) {
         const auto msg = m_txQueue.dequeue();
-        // TODO: re-encode MAVLink frame and broadcast
-        Q_UNUSED(msg)
+        uint8_t buffer[MAVLINK_MAX_PACKET_LEN];
+        uint16_t len = mavlink_msg_to_send_buffer(buffer, &msg.raw);
+
+        if (m_remoteKnown) {
+            qint64 sent = m_socket->writeDatagram(
+                reinterpret_cast<const char*>(buffer), len,
+                m_remoteAddress, m_remotePort);
+            if (sent < 0) {
+                qWarning() << "[MavlinkIO] TX failed:" << m_socket->errorString();
+            }
+        } else {
+            // Broadcast to link-local if no specific remote known
+            m_socket->writeDatagram(
+                reinterpret_cast<const char*>(buffer), len,
+                QHostAddress::Broadcast, m_bindPort);
+        }
     }
 }
 

@@ -1,7 +1,9 @@
 #include "mission_editor_plugin.hpp"
 #include "core/bus/telemetry_bus.hpp"
+#include "core/types/common.hpp"
 #include <QVBoxLayout>
 #include <QHeaderView>
+#include <QDebug>
 
 namespace aegis::plugins {
 
@@ -61,7 +63,31 @@ void MissionEditorPlugin::onAddWaypoint() {
 }
 
 void MissionEditorPlugin::onUploadMission() {
-    // TODO: marshal waypoints into MAVLink MISSION_ITEM_INT messages
+    for (int i = 0; i < m_table->rowCount(); ++i) {
+        core::types::VehicleCommand cmd;
+        cmd.commandId = 16;     // MAV_CMD_NAV_WAYPOINT
+        cmd.targetSystem = 1;   // Default PX4 system ID
+        cmd.targetComponent = 1;
+        cmd.params[0] = 0;      // Hold time
+        cmd.params[1] = 0;      // Accept radius
+        cmd.params[2] = 0;      // Pass radius
+        cmd.params[3] = std::numeric_limits<float>::quiet_NaN(); // Yaw
+
+        bool ok;
+        double lat = m_table->item(i, 1)->text().toDouble(&ok);
+        double lon = m_table->item(i, 2)->text().toDouble(&ok);
+        double alt = m_table->item(i, 3)->text().toDouble(&ok);
+
+        cmd.params[4] = static_cast<float>(lat);
+        cmd.params[5] = static_cast<float>(lon);
+        cmd.params[6] = static_cast<float>(alt);
+
+        if (m_bus && canIssueCommand(cmd)) {
+            m_bus->postCommand(cmd);
+            qDebug() << "[MissionEditor] Sent NAV_WAYPOINT" << i
+                     << "lat:" << cmd.params[4] << "lon:" << cmd.params[5];
+        }
+    }
 }
 
 void MissionEditorPlugin::onClearMission() {
