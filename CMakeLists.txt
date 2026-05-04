@@ -90,6 +90,7 @@ if(AEGIS_BUILD_PLUGINS)
     add_subdirectory(src/plugins/telemetry_hud)
     add_subdirectory(src/plugins/mission_editor)
     add_subdirectory(src/plugins/alert_console)
+    add_subdirectory(src/plugins/map_view)
 endif()
 
 # ── Tests ───────────────────────────────────────────────────────────

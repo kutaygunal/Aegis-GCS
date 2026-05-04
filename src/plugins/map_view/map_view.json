@@ -1,0 +1,1 @@
+{"id":"aegis.plugins.map_view","name":"Map View","version":"1.0.0","author":"AEGIS Team","category":"Flight","permissions":["read:telemetry","read:mission"],"min_api_version":"1.0"}

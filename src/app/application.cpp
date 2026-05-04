@@ -39,7 +39,8 @@ bool Application::initialize() {
         m_config.insert("autostartPlugins", QStringList()
             << "aegis.plugins.telemetry_hud"
             << "aegis.plugins.alert_console"
-            << "aegis.plugins.mission_editor");
+            << "aegis.plugins.mission_editor"
+            << "aegis.plugins.map_view");
     }
 
     // ── Core services ─────────────────────────────────────────────────
