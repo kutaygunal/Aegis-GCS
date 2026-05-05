@@ -24,68 +24,195 @@ This prevents scope creep, preserves architecture, and keeps every change review
 
 ---
 
-## Workflow
+## Workflow (9-Step Execution)
 
-### Step 1: Pick a Task
+Every task must run through the following 9 steps in order. **Do not skip steps.** **Do not push to `main` before Step 8 (Review Approval).**
 
-Find the next `ready` task in `tasks.yaml`. A task is `ready` when:
-- All `depends_on` tasks have status `done`
-- Its phase is active (or you are explicitly prioritizing it)
+### Step 1 — Read Task YAML
+Read the task definition from `tasks.yaml`. Verify:
+- Status is `ready` (all `depends_on` are `done`).
+- Phase is active or explicitly prioritized.
+- Acceptance criteria are clear and testable.
 
-The first task to run is:
-> **P1-001: Formal connection state machine** (Sprint 1 — Reliability Core)
+**Artifact:** None (in-memory context).
 
-### Step 2: Run the Planner
+---
 
-Feed the Planner prompt (`prompts/planner.md`) with the task definition from `tasks.yaml`.
+### Step 2 — Create Git Branch
+Create a feature branch from `main`. Never implement directly on `main`.
 
-The Planner will:
-- Identify files to touch
-- Identify risks
-- Define tests
-- Produce a structured plan document
+```bash
+git checkout main
+git pull origin main
+git checkout -b task/P1-XXX
+```
+
+**Naming convention:** `task/<task-id>` (e.g., `task/P1-002`).
+
+**Artifact:** Local branch `task/P1-XXX`.
+
+---
+
+### Step 3 — Generate Pi Prompt
+Feed the Planner prompt (`prompts/planner.md`) with the task definition. The Planner must produce:
+- Files to touch with rationale.
+- Mapping of acceptance criteria to implementation strategy.
+- Test plan with specific test names and what they verify.
+- Risk and deviation notes.
 
 **Do not let the Planner modify code.**
 
-### Step 3: Run the Worker
+**Artifact:** `orchestration/runs/P1-XXX_plan.md`
 
+---
+
+### Step 4 — Run Pi Coding Agent
 Feed the Worker prompt (`prompts/worker.md`) with:
-- The task definition
-- The Planner's plan
+- The task definition from `tasks.yaml`
+- The Planner's plan from `runs/P1-XXX_plan.md`
 
-The Worker will:
-- Implement exactly the planned changes
-- Add or update tests
-- Build and run tests
-- Produce a Run Report
+The Worker must:
+- Implement **only** the planned changes.
+- Add or update tests for every behavior change.
+- Build and run the tests listed in `tasks.yaml`.
+- Produce a Run Report with build output, test output, and file inventory.
 
-### Step 4: Run the Reviewer
+**Artifact:** `orchestration/runs/P1-XXX_run.md`
 
+---
+
+### Step 5 — Build Project
+Compile the full project (or the minimum targets affected). Fix compilation errors before proceeding.
+
+```bash
+cmake --build build --config Release --parallel
+```
+
+**Artifact:** Build logs captured in `runs/P1-XXX_run.md`.
+
+---
+
+### Step 6 — Run Tests
+Run the test commands listed in the task's `test_commands`. All must pass.
+
+```bash
+ctest --test-dir build --output-on-failure -C Release
+```
+
+**Artifact:** Test output captured in `runs/P1-XXX_run.md`.
+
+---
+
+### Step 7 — Save Logs
+Commit all changes (code + tests + orchestration docs) **on the feature branch**. Do not push to `main`.
+
+```bash
+git add -A
+git commit -m "P1-XXX: <task title>"
+```
+
+**Artifacts committed to branch:**
+- Code changes (src/, tests/, config/)
+- `orchestration/runs/P1-XXX_plan.md`
+- `orchestration/runs/P1-XXX_run.md`
+
+---
+
+### Step 8 — Ask Review Agent to Review Diff
 Feed the Reviewer prompt (`prompts/reviewer.md`) with:
-- The task definition
-- The Worker's Run Report
-- The full diff
+- The task definition from `tasks.yaml`
+- The Worker's Run Report from `runs/P1-XXX_run.md`
+- The **full diff** of the feature branch against `main`
 
-The Reviewer will return:
-- **APPROVE** → Mark task status as `done`, commit, push
-- **REQUEST_CHANGES** → Return to Worker with blockers
+The Reviewer returns one of:
+- **APPROVE** → Proceed to Step 9.
+- **REQUEST_CHANGES** → Return to Step 4 with blockers. Produce `P1-XXX_run_v2.md` and `P1-XXX_review_v2.md`.
 
-### Step 5: Record the Run
+**Artifact:** `orchestration/runs/P1-XXX_review.md`
 
-Save the Planner plan, Worker Run Report, and Reviewer decision in `runs/`:
+---
 
+### Step 9 — Create Summary
+1. Merge the approved feature branch into `main`:
+```bash
+git checkout main
+git merge task/P1-XXX --no-ff -m "Merge P1-XXX: <task title>"
+git push origin main
+```
+
+2. Update `orchestration/tasks.yaml`:
+```yaml
+status: done
+```
+
+3. Add a `notes` field to the task with a brief summary:
+```yaml
+notes: >
+  Implemented ... All N tests pass. No architecture violations.
+```
+
+**Final artifacts in `runs/`:**
 ```
 orchestration/runs/
-  P1-001_plan.md
-  P1-001_run.md
-  P1-001_review.md
+  P1-XXX_plan.md       — Planner output (Step 3)
+  P1-XXX_run.md        — Worker output (Steps 4–7)
+  P1-XXX_review.md   — Reviewer output (Step 8)
 ```
 
-Update `tasks.yaml` to set `status: done` for the completed task.
+If multiple review rounds were needed:
+```
+  P1-XXX_run_v1.md
+  P1-XXX_review_v1.md
+  P1-XXX_run_v2.md
+  P1-XXX_review_v2.md
+```
 
-### Step 6: Next Task
+---
 
-Return to Step 1 with the next ready task.
+## Workflow Summary Diagram
+
+```
+┌─────────────┐
+│ 1. Read YAML│
+└──────┬──────┘
+       ▼
+┌─────────────┐
+│ 2. Git Branch│
+└──────┬──────┘
+       ▼
+┌─────────────┐     ┌─────────────┐
+│ 3. Planner  │────▶│ Plan .md    │
+└──────┬──────┘     └─────────────┘
+       ▼
+┌─────────────┐     ┌─────────────┐
+│ 4. Worker   │────▶│ Run .md     │
+└──────┬──────┘     └─────────────┘
+       ▼
+┌─────────────┐
+│ 5. Build    │
+└──────┬──────┘
+       ▼
+┌─────────────┐
+│ 6. Test     │
+└──────┬──────┘
+       ▼
+┌─────────────┐
+│ 7. Commit   │
+└──────┬──────┘
+       ▼
+┌─────────────┐     ┌─────────────┐
+│ 8. Reviewer │────▶│ Review .md  │
+└──────┬──────┘     └─────────────┘
+       │
+       ├─ REQUEST_CHANGES ─▶ Go back to Step 4
+       │
+       └─ APPROVE ─────────▶ Step 9
+                            ▼
+                    ┌─────────────┐
+                    │ 9. Merge +  │
+                    │    Summary  │
+                    └─────────────┘
+```
 
 ---
 
