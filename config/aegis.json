@@ -13,7 +13,9 @@
     },
     "logging": {
         "minLevel": "Debug",
-        "file": "aegis.log"
+        "file": "aegis.log",
+        "maxFiles": 5,
+        "maxSizeBytes": 10485760
     },
     "dummyTelemetry": {
         "enabled": true,

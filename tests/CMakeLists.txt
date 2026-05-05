@@ -53,6 +53,13 @@ target_link_libraries(test_connection_state_machine PRIVATE
     aegis_core aegis_telemetry Qt6::Core Qt6::Test GTest::gtest_main)
 add_test(NAME ConnectionStateMachine COMMAND test_connection_state_machine)
 
+add_executable(test_logger
+    utils/test_logger.cpp
+)
+target_link_libraries(test_logger PRIVATE
+    aegis_utils Qt6::Core Qt6::Test GTest::gtest_main)
+add_test(NAME Logger COMMAND test_logger)
+
 add_executable(test_mavlink_io
     telemetry/test_mavlink_io.cpp
 )

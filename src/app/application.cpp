@@ -83,7 +83,9 @@ QVariantMap defaultConfig() {
         }},
         {QStringLiteral("logging"), QVariantMap{
             {QStringLiteral("minLevel"), QStringLiteral("Debug")},
-            {QStringLiteral("file"), QStringLiteral("aegis.log")}
+            {QStringLiteral("file"), QStringLiteral("aegis.log")},
+            {QStringLiteral("maxFiles"), 5},
+            {QStringLiteral("maxSizeBytes"), 10485760}
         }},
         {QStringLiteral("dummyTelemetry"), QVariantMap{
             {QStringLiteral("enabled"), true},
@@ -121,6 +123,11 @@ QVariantMap validateAndNormalizeConfig(const QVariantMap& rawConfig) {
         qWarning() << "[Application] Invalid logging.minLevel, using default";
         return QStringLiteral("Debug");
     }());
+
+    const int maxFiles = logging.value("maxFiles", 5).toInt();
+    logging.insert("maxFiles", maxFiles > 0 ? maxFiles : 5);
+    const qint64 maxSizeBytes = logging.value("maxSizeBytes", 10485760).toLongLong();
+    logging.insert("maxSizeBytes", maxSizeBytes > 0 ? maxSizeBytes : 10485760);
     config.insert("logging", logging);
 
     QVariantMap dummyTelemetry = config.value("dummyTelemetry").toMap();
@@ -195,6 +202,9 @@ bool Application::initialize() {
     }
     aegis::utils::Logger::instance().setMinLevel(
         parseLogLevel(loggingConfig.value("minLevel", "Debug").toString()));
+    aegis::utils::Logger::instance().setRotation(
+        loggingConfig.value("maxSizeBytes", 10485760).toLongLong(),
+        loggingConfig.value("maxFiles", 5).toInt());
 
     // ── UI layer ──────────────────────────────────────────────────────
     m_mainWindow.reset(new aegis::ui::MainWindow());
