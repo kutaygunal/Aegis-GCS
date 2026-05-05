@@ -46,6 +46,13 @@ target_link_libraries(test_log_replay PRIVATE
     aegis_core aegis_telemetry Qt6::Core Qt6::Test GTest::gtest_main)
 add_test(NAME LogReplay COMMAND test_log_replay)
 
+add_executable(test_connection_state_machine
+    telemetry/test_connection_state_machine.cpp
+)
+target_link_libraries(test_connection_state_machine PRIVATE
+    aegis_core aegis_telemetry Qt6::Core Qt6::Test GTest::gtest_main)
+add_test(NAME ConnectionStateMachine COMMAND test_connection_state_machine)
+
 add_executable(test_mavlink_io
     telemetry/test_mavlink_io.cpp
 )

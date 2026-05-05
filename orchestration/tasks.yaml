@@ -31,12 +31,11 @@ tasks:
     test_commands:
       - cmake --build build --config Release
       - ctest --test-dir build --output-on-failure
-    status: ready
+    status: done
     notes: >
-      This replaces the current implicit connection logic in MavlinkIO.
-      The existing heartbeat timeout behavior is the seed; we formalize it
-      into an explicit state machine class (e.g., ConnectionStateMachine)
-      that MavlinkIO drives with events.
+      Implemented ConnectionStateMachine with 6 states. All 15 tests pass.
+      MavlinkIO now feeds events to the state machine. UI displays all states
+      via ConnectionBar with color coding. TelemetryBus propagates full enum.
 
   - id: P1-002
     phase: P1

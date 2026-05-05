@@ -133,7 +133,7 @@ void MainWindow::buildStatusBar() {
 
 void MainWindow::updateConnectionState(aegis::core::types::ConnectionState state) {
     if (m_connectionBar) {
-        m_connectionBar->setConnected(state == aegis::core::types::ConnectionState::Connected);
+        m_connectionBar->setConnectionState(state);
     }
 }
 

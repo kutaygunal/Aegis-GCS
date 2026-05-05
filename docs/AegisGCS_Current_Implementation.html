@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AEGIS GCS — Current Implementation Technical Overview</title>
+  <style>
+    @page { size: A4; margin: 15mm 14mm; }
+    :root {
+      --bg: #0b1020;
+      --panel: #111827;
+      --panel-2: #172033;
+      --ink: #172033;
+      --muted: #5b677a;
+      --line: #dbe4f0;
+      --accent: #2dd4bf;
+      --accent-2: #38bdf8;
+      --danger: #f43f5e;
+      --warn: #f59e0b;
+      --ok: #22c55e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.45;
+      background: white;
+    }
+    .cover {
+      min-height: 262mm;
+      margin: -15mm -14mm 0;
+      padding: 34mm 22mm 20mm;
+      color: white;
+      background:
+        radial-gradient(circle at 75% 20%, rgba(45,212,191,.25), transparent 30%),
+        radial-gradient(circle at 10% 80%, rgba(56,189,248,.22), transparent 35%),
+        linear-gradient(145deg, #08111f 0%, #111827 45%, #020617 100%);
+      page-break-after: always;
+      position: relative;
+      overflow: hidden;
+    }
+    .cover:after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px);
+      background-size: 22px 22px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,.7), transparent 85%);
+    }
+    .cover-content { position: relative; z-index: 1; max-width: 165mm; }
+    .eyebrow { color: var(--accent); text-transform: uppercase; letter-spacing: .16em; font-size: 9pt; font-weight: 700; }
+    h1 { font-size: 34pt; line-height: 1.05; margin: 10mm 0 5mm; letter-spacing: -.04em; }
+    .subtitle { font-size: 14pt; color: #cbd5e1; max-width: 145mm; }
+    .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-top: 22mm; }
+    .meta-card { background: rgba(15,23,42,.72); border: 1px solid rgba(148,163,184,.28); border-radius: 12px; padding: 5mm; }
+    .meta-card b { color: white; display: block; margin-bottom: 1mm; }
+    .meta-card span { color: #cbd5e1; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 2mm; margin-top: 10mm; }
+    .badge { border: 1px solid rgba(45,212,191,.4); background: rgba(45,212,191,.1); color: #ccfbf1; padding: 2mm 3mm; border-radius: 999px; font-size: 8.5pt; }
+    h2 { font-size: 19pt; margin: 10mm 0 4mm; color: #0f172a; page-break-after: avoid; border-bottom: 2px solid var(--line); padding-bottom: 2mm; }
+    h3 { font-size: 13pt; margin: 7mm 0 2mm; color: #172033; page-break-after: avoid; }
+    h4 { font-size: 11pt; margin: 5mm 0 1.5mm; color: #334155; }
+    p { margin: 0 0 3mm; }
+    ul { margin-top: 1mm; padding-left: 6mm; }
+    li { margin: 1.2mm 0; }
+    table { width: 100%; border-collapse: collapse; margin: 3mm 0 5mm; page-break-inside: avoid; }
+    th { background: #eef6ff; color: #0f172a; text-align: left; font-size: 9.5pt; }
+    th, td { border: 1px solid var(--line); padding: 2.2mm 2.6mm; vertical-align: top; }
+    code { font-family: "Cascadia Code", Consolas, monospace; background: #f1f5f9; color: #0f172a; border-radius: 4px; padding: .4mm 1mm; }
+    pre { background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 4mm; overflow: hidden; font-size: 8.6pt; line-height: 1.35; page-break-inside: avoid; }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    .toc { page-break-after: always; }
+    .toc ol { columns: 2; padding-left: 6mm; }
+    .toc li { break-inside: avoid; margin-bottom: 2mm; }
+    .callout { border-left: 4px solid var(--accent-2); background: #f0f9ff; padding: 3mm 4mm; border-radius: 8px; margin: 4mm 0; page-break-inside: avoid; }
+    .callout.warn { border-left-color: var(--warn); background: #fffbeb; }
+    .callout.ok { border-left-color: var(--ok); background: #f0fdf4; }
+    .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4mm; margin: 4mm 0; }
+    .card { border: 1px solid var(--line); border-radius: 12px; padding: 4mm; background: #fbfdff; page-break-inside: avoid; }
+    .card h3 { margin-top: 0; }
+    .pill { display:inline-block; border-radius:999px; padding: .8mm 2mm; font-size: 8pt; font-weight:700; color:#075985; background:#e0f2fe; border:1px solid #bae6fd; }
+    .diagram { border: 1px solid var(--line); border-radius: 12px; padding: 5mm; background: #f8fafc; margin: 4mm 0; page-break-inside: avoid; }
+    .stack { display: grid; gap: 2mm; }
+    .layer { padding: 3mm; border-radius: 9px; color: white; font-weight: 700; text-align:center; }
+    .l1 { background:#0f766e; } .l2 { background:#0369a1; } .l3 { background:#4338ca; } .l4 { background:#7c3aed; } .l5 { background:#be123c; }
+    .footer-note { color: var(--muted); font-size: 9pt; margin-top: 8mm; }
+    .page-break { page-break-before: always; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div class="cover-content">
+      <div class="eyebrow">Technical Implementation Overview</div>
+      <h1>AEGIS GCS</h1>
+      <p class="subtitle"><b>Aerospace Extensible Ground Control Station</b> — a modular C++20/Qt6 desktop operator platform for UAS telemetry, mission tooling, plugin-based UI panels, and native map visualization.</p>
+      <div class="badge-row">
+        <span class="badge">C++20</span><span class="badge">Qt6 Widgets</span><span class="badge">MAVLink 2</span><span class="badge">QPluginLoader</span><span class="badge">OpenStreetMap Tiles</span><span class="badge">GoogleTest</span><span class="badge">CMake</span>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-card"><b>Document Version</b><span>1.0 — Current Implementation</span></div>
+        <div class="meta-card"><b>Generated</b><span>2026-05-04</span></div>
+        <div class="meta-card"><b>Repository</b><span>C:\Users\kutay\Desktop\Projects\aegis-gcs</span></div>
+        <div class="meta-card"><b>Git Revision</b><span>d6f1298</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="toc">
+    <h2>Table of Contents</h2>
+    <ol>
+      <li>Executive Summary</li>
+      <li>Technology Stack</li>
+      <li>System Architecture</li>
+      <li>Application Runtime and Configuration</li>
+      <li>Core Services</li>
+      <li>Telemetry and MAVLink Pipeline</li>
+      <li>Plugin System</li>
+      <li>User Interface Shell</li>
+      <li>Map View Implementation</li>
+      <li>Replay and Test Infrastructure</li>
+      <li>Build, Deployment, and CI</li>
+      <li>Commercial-Grade Readiness Snapshot</li>
+    </ol>
+  </section>
+
+  <h2>1. Executive Summary</h2>
+  <p>AEGIS GCS is currently implemented as a native desktop Ground Control Station shell. The application is built around a Qt Widgets main window, a typed telemetry bus, a thread-safe vehicle state model, a runtime plugin host, and a MAVLink UDP input/output layer. It supports live/dummy telemetry, log replay parsing, plugin panels, alert visualization, mission editor scaffolding, and a real OpenStreetMap-backed native map view.</p>
+  <div class="callout ok"><b>Current status:</b> AEGIS is a working modular GCS foundation with core runtime services and multiple plugins. It is not yet a complete certified flight-control product, but its architecture is suitable for iterative hardening toward commercial-grade deployment.</div>
+
+  <h2>2. Technology Stack</h2>
+  <table>
+    <tr><th>Area</th><th>Technology</th><th>Current Usage</th></tr>
+    <tr><td>Language</td><td>C++20</td><td>Application, plugins, telemetry, tests, and UI are implemented in modern C++.</td></tr>
+    <tr><td>UI Framework</td><td>Qt6 Widgets</td><td>Main shell, dock widgets, toolbar/status bar, plugin panels, and native graphics map.</td></tr>
+    <tr><td>Build System</td><td>CMake 3.20+</td><td>Cross-platform project structure, static libraries, shared plugin targets, test targets.</td></tr>
+    <tr><td>Plugin Runtime</td><td>Qt <code>QPluginLoader</code></td><td>Runtime discovery/loading of shared-library plugins implementing <code>IPlugin</code>.</td></tr>
+    <tr><td>Networking</td><td>Qt Network</td><td>UDP MAVLink I/O via <code>QUdpSocket</code>; OSM tile downloads via <code>QNetworkAccessManager</code>.</td></tr>
+    <tr><td>Telemetry Protocol</td><td>MAVLink 2 C headers</td><td>Message parsing, command packing, heartbeat detection, selected telemetry decoding.</td></tr>
+    <tr><td>Threading</td><td>QThread, Qt queued signals, locks</td><td>Dedicated MAVLink I/O thread, cross-thread signal delivery, thread-safe state access.</td></tr>
+    <tr><td>Testing</td><td>GoogleTest + Qt Test</td><td>Unit tests for bus/state/ring buffer, parser tests, replay tests, UDP lifecycle test.</td></tr>
+    <tr><td>CI/CD</td><td>GitHub Actions</td><td>Linux and Windows build/test workflow scaffold.</td></tr>
+  </table>
+
+  <h2>3. System Architecture</h2>
+  <div class="diagram">
+    <div class="stack">
+      <div class="layer l1">Qt Widgets Operator Shell — MainWindow, docks, toolbar, status bar</div>
+      <div class="layer l2">Runtime Plugins — Map View, Telemetry HUD, Alert Console, Mission Editor</div>
+      <div class="layer l3">Core Services — TelemetryBus, VehicleState, PluginHost</div>
+      <div class="layer l4">Telemetry Services — MavlinkIO, MavlinkParser, LogReplay</div>
+      <div class="layer l5">External Interfaces — UDP MAVLink, OpenStreetMap tile server, replay files</div>
+    </div>
+  </div>
+  <p>The current architecture separates the long-lived application shell from runtime-loaded plugin functionality. The <code>Application</code> class owns the core service graph, connects signal/slot pipelines, loads configuration, discovers plugins, and starts optional dummy telemetry.</p>
+
+  <h3>Repository Structure</h3>
+  <pre><code>aegis-gcs/
+├── config/                 Runtime JSON configuration
+├── resources/              Qt resource files
+├── src/app/                Application bootstrapper and service wiring
+├── src/core/               Bus, state model, plugin host, interfaces, shared types
+├── src/plugins/            Runtime-loaded Qt plugin modules
+├── src/telemetry/          MAVLink I/O, parser, replay, telemetry types
+├── src/ui/                 Main window, dock manager, theme, status widgets
+├── src/utils/              Logger, ring buffer, thread pool
+├── tests/                  GoogleTest/Qt tests
+└── third_party/mavlink/    MAVLink C headers</code></pre>
+
+  <h2>4. Application Runtime and Configuration</h2>
+  <p>The application loads JSON configuration from <code>config/aegis.json</code>, merges it with built-in defaults, validates key fields, and uses the normalized config to drive runtime behavior.</p>
+  <h3>Implemented Config Domains</h3>
+  <table>
+    <tr><th>Domain</th><th>Purpose</th></tr>
+    <tr><td><code>pluginPaths</code></td><td>Additional directories for plugin discovery.</td></tr>
+    <tr><td><code>autostartPlugins</code></td><td>Plugin IDs to load at startup.</td></tr>
+    <tr><td><code>telemetry</code></td><td>UDP bind address, bind port, heartbeat timeout.</td></tr>
+    <tr><td><code>logging</code></td><td>Minimum log level and log file path.</td></tr>
+    <tr><td><code>dummyTelemetry</code></td><td>Offline/demo telemetry generator enablement and interval.</td></tr>
+    <tr><td><code>plugins</code></td><td>Per-plugin settings passed to each plugin during initialization.</td></tr>
+  </table>
+  <pre><code>{
+  "telemetry": {
+    "bindAddress": "0.0.0.0",
+    "bindPort": 14550,
+    "heartbeatTimeoutMs": 3000
+  },
+  "dummyTelemetry": { "enabled": true, "intervalMs": 100 },
+  "plugins": {
+    "aegis.plugins.map_view": {
+      "zoom": 15,
+      "tileUrlTemplate": "https://tile.openstreetmap.org/%1/%2/%3.png"
+    },
+    "aegis.plugins.alert_console": {
+      "maxItems": 250,
+      "showTimestamps": true
+    }
+  }
+}</code></pre>
+
+  <h2>5. Core Services</h2>
+  <div class="cards">
+    <div class="card"><h3>TelemetryBus</h3><p>Typed Qt signal bus for hot-path telemetry and system events. It emits attitude, position, battery, heartbeat, alerts, connection state, command responses, and outbound vehicle commands.</p></div>
+    <div class="card"><h3>VehicleState</h3><p>Thread-safe canonical model of the active vehicle. Uses <code>QReadWriteLock</code> and exposes typed getters/mutators with update signals.</p></div>
+    <div class="card"><h3>PluginHost</h3><p>Discovers shared libraries, reads Qt plugin metadata, validates <code>IPlugin</code>, initializes plugins with bus/state/config, and manages unload lifecycle.</p></div>
+    <div class="card"><h3>Shared Types</h3><p>Defines telemetry and command data structures: <code>AttitudeData</code>, <code>PositionData</code>, <code>BatteryData</code>, <code>SystemState</code>, and <code>VehicleCommand</code>.</p></div>
+  </div>
+
+  <h2>6. Telemetry and MAVLink Pipeline</h2>
+  <p>The live telemetry path receives MAVLink frames over UDP on a dedicated worker thread. Parsed messages are emitted through Qt queued connections to the main-thread parser, which updates <code>VehicleState</code> and broadcasts typed bus events.</p>
+  <pre><code>UDP Socket → MavlinkIO → MavlinkParser → VehicleState + TelemetryBus → UI/Plugins</code></pre>
+  <h3>Current MAVLink Decoding</h3>
+  <table>
+    <tr><th>MAVLink Message</th><th>AEGIS Output</th></tr>
+    <tr><td><code>HEARTBEAT</code></td><td>System ID/component, base mode, custom mode, armed state, system status.</td></tr>
+    <tr><td><code>ATTITUDE</code></td><td>Roll, pitch, yaw, angular rates.</td></tr>
+    <tr><td><code>GLOBAL_POSITION_INT</code></td><td>Latitude, longitude, altitude, relative altitude, velocity, heading.</td></tr>
+    <tr><td><code>BATTERY_STATUS</code></td><td>Remaining percentage, voltage, current.</td></tr>
+    <tr><td><code>MISSION_CURRENT</code></td><td>Current mission index.</td></tr>
+    <tr><td><code>STATUSTEXT</code></td><td>Alert severity mapping and alert console output.</td></tr>
+  </table>
+
+  <h3>Connection Lifecycle</h3>
+  <p><code>MavlinkIO</code> now separates socket availability from vehicle health. It only emits connected after receiving a MAVLink heartbeat. If no heartbeat arrives within the configured timeout, it emits disconnected. Shutdown stops timers, closes sockets, clears remote state, and waits for the worker thread.</p>
+  <div class="callout"><b>Important design decision:</b> socket bind success is not treated as a vehicle connection. A vehicle is considered alive only after heartbeat evidence.</div>
+
+  <h2>7. Plugin System</h2>
+  <p>Plugins are shared libraries implementing the <code>IPlugin</code> interface. Each plugin receives pointers to the global <code>TelemetryBus</code> and <code>VehicleState</code>, plus a plugin-specific configuration map.</p>
+  <table>
+    <tr><th>Plugin</th><th>Status</th><th>Description</th></tr>
+    <tr><td>Map View</td><td><span class="pill">Implemented</span></td><td>Main central map using native Qt graphics and OpenStreetMap tiles.</td></tr>
+    <tr><td>Telemetry HUD</td><td><span class="pill">Implemented</span></td><td>Displays attitude, battery, and system state.</td></tr>
+    <tr><td>Alert Console</td><td><span class="pill">Implemented</span></td><td>Scrollable severity-colored alert list with configurable history and timestamps.</td></tr>
+    <tr><td>Mission Editor</td><td><span class="pill">Basic</span></td><td>Waypoint table and command-source scaffold; full MAVLink mission protocol is future work.</td></tr>
+  </table>
+
+  <h2>8. User Interface Shell</h2>
+  <p>The UI shell is a Qt Widgets <code>QMainWindow</code> with menu bar, toolbar, status bar, central map area, and right-side docked plugin panels. The map plugin is injected as the central widget. Other plugins are wrapped in <code>QDockWidget</code> containers and tabified.</p>
+  <h3>Current UI Features</h3>
+  <ul>
+    <li>Dark operator theme via <code>ThemeEngine</code>.</li>
+    <li>File menu for opening replay logs.</li>
+    <li>Connect menu and toolbar action for UDP MAVLink.</li>
+    <li>Status bar connection indicator.</li>
+    <li>Vehicle armed/mode display derived from heartbeat state.</li>
+    <li>Plugin injection and basic dock/tab management.</li>
+  </ul>
+
+  <h2>9. Map View Implementation</h2>
+  <p>The current map uses Qt native graphics rather than an embedded browser. It converts latitude/longitude to Web Mercator pixel coordinates, downloads OpenStreetMap tiles, places them in a <code>QGraphicsScene</code>, and overlays vehicle position, heading, and track history.</p>
+  <table>
+    <tr><th>Feature</th><th>Implementation</th></tr>
+    <tr><td>Tile provider</td><td>Configurable URL template, defaulting to <code>https://tile.openstreetmap.org/%1/%2/%3.png</code>.</td></tr>
+    <tr><td>Projection</td><td>Web Mercator tile coordinate formula.</td></tr>
+    <tr><td>Networking</td><td><code>QNetworkAccessManager</code> and <code>QNetworkReply</code>.</td></tr>
+    <tr><td>Rendering</td><td><code>QGraphicsView</code>, <code>QGraphicsScene</code>, pixmap tile items, path overlay, marker overlay.</td></tr>
+    <tr><td>Zoom</td><td>Changes OSM tile zoom level and refreshes tile set.</td></tr>
+  </table>
+  <div class="callout warn"><b>Operational note:</b> OSM tile usage requires respecting OpenStreetMap tile policy. A commercial deployment should add tile caching, provider attribution, rate limiting, and preferably a dedicated commercial tile provider or offline MBTiles support.</div>
+
+  <h2>10. Replay and Test Infrastructure</h2>
+  <p>The replay service reads binary MAVLink frames from log files and emits decoded messages into the normal parser path. This allows replayed telemetry to update the same state/bus/UI pipeline as live UDP telemetry.</p>
+  <h3>Current Automated Tests</h3>
+  <table>
+    <tr><th>Test Target</th><th>Coverage</th></tr>
+    <tr><td><code>test_telemetry_bus</code></td><td>Signal delivery, topic pub/sub, outbound commands, command responses.</td></tr>
+    <tr><td><code>test_vehicle_state</code></td><td>Thread-safe state update/getter behavior.</td></tr>
+    <tr><td><code>test_ring_buffer</code></td><td>Fixed-size telemetry history behavior.</td></tr>
+    <tr><td><code>test_parsers</code></td><td>HEARTBEAT, ATTITUDE, GLOBAL_POSITION_INT, BATTERY_STATUS.</td></tr>
+    <tr><td><code>test_log_replay</code></td><td>Replay step and playback completion/progress.</td></tr>
+    <tr><td><code>test_mavlink_io</code></td><td>UDP heartbeat connection and timeout disconnection.</td></tr>
+  </table>
+
+  <h2>11. Build, Deployment, and CI</h2>
+  <p>The project builds with CMake and Qt6. Core libraries are static targets; plugins are shared libraries deployed under the runtime <code>plugins/</code> directory. On Windows, the build integrates <code>windeployqt</code> for Qt runtime DLL deployment.</p>
+  <pre><code>cmake -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.8.2/msvc2022_64" -DAEGIS_BUILD_TESTS=ON
+cmake --build build --config Release --parallel
+ctest --test-dir build --output-on-failure -C Release</code></pre>
+  <p>GitHub Actions currently defines Linux and Windows build/test jobs using Qt installation action, CMake, and CTest.</p>
+
+  <h2>12. Commercial-Grade Readiness Snapshot</h2>
+  <table>
+    <tr><th>Area</th><th>Current State</th><th>Commercial Next Step</th></tr>
+    <tr><td>Architecture</td><td>Modular and plugin-based.</td><td>Stabilize plugin SDK/ABI and add service registry.</td></tr>
+    <tr><td>Telemetry</td><td>Selected MAVLink messages decoded.</td><td>Complete mission, parameter, command ACK, signing, and multi-vehicle support.</td></tr>
+    <tr><td>Map</td><td>Real OSM online tile layer.</td><td>Add offline cache, provider attribution, commercial provider, and geofence editing.</td></tr>
+    <tr><td>Safety</td><td>Heartbeat timeout and alerts scaffold.</td><td>Add full failsafe rules, command confirmation, and audit logging.</td></tr>
+    <tr><td>Testing</td><td>Growing unit/integration test suite.</td><td>Add fuzzing, UI smoke tests, sanitizers, replay regression corpus, and hardware-in-loop tests.</td></tr>
+    <tr><td>Deployment</td><td>Build and Windows runtime deployment scaffold.</td><td>Add installer, updater, crash reporter, license management, and diagnostics export.</td></tr>
+  </table>
+
+  <p class="footer-note">This document describes the current implementation as of git revision d6f1298. It is intended as a technical overview for development, planning, onboarding, and investor/customer-facing engineering discussions.</p>
+</body>
+</html>

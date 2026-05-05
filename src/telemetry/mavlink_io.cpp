@@ -19,6 +19,11 @@ MavlinkIO::~MavlinkIO() {
     m_workerThread.wait(5000);
 }
 
+ConnectionStateMachine::State MavlinkIO::connectionState() const {
+    return m_stateMachine ? m_stateMachine->currentState()
+                          : ConnectionStateMachine::State::Disconnected;
+}
+
 void MavlinkIO::start(const QHostAddress& bindAddress, quint16 bindPort) {
     if (m_running) {
         qWarning() << "[MavlinkIO] Already running";
@@ -28,7 +33,7 @@ void MavlinkIO::start(const QHostAddress& bindAddress, quint16 bindPort) {
     m_bindAddress = bindAddress;
     m_bindPort = bindPort;
     m_remoteKnown = false;
-    m_linkAlive = false;
+    m_firstPacketReceived = false;
     m_lastHeartbeatUtc = QDateTime();
     m_workerThread.start(QThread::TimeCriticalPriority);
 }
@@ -47,17 +52,20 @@ void MavlinkIO::stop() {
                 m_socket->deleteLater();
                 m_socket = nullptr;
             }
-            if (m_linkAlive) {
-                m_linkAlive = false;
-                emit connectionStateChanged(false);
+            if (m_stateMachine) {
+                m_stateMachine->onStop();
             }
             m_remoteKnown = false;
+            m_firstPacketReceived = false;
             m_running = false;
         }, Qt::BlockingQueuedConnection);
     } else {
         m_running = false;
-        m_linkAlive = false;
         m_remoteKnown = false;
+        m_firstPacketReceived = false;
+        if (m_stateMachine) {
+            m_stateMachine->onStop();
+        }
     }
 
     m_workerThread.quit();
@@ -128,8 +136,19 @@ void MavlinkIO::setupSocket() {
     connect(m_txTimer, &QTimer::timeout, this, &MavlinkIO::processOutboundQueue);
     m_txTimer->start();
 
+    // Create state machine on the worker thread
+    m_stateMachine = new ConnectionStateMachine(this);
+    connect(m_stateMachine, &ConnectionStateMachine::stateChanged,
+            this, [this](ConnectionStateMachine::State state) {
+        emit connectionStateChanged(
+            ConnectionStateMachine::stateToConnectionState(state));
+    });
+
     m_running = true;
-    m_linkAlive = false;
+    m_firstPacketReceived = false;
+
+    m_stateMachine->onSocketBound();
+
     qDebug() << "[MavlinkIO] Listening on" << m_bindAddress.toString() << ":"
              << m_bindPort;
 }
@@ -147,15 +166,20 @@ void MavlinkIO::onReadyRead() {
             setRemoteAddress(dgram.senderAddress(), dgram.senderPort());
         }
 
+        // Notify state machine on first packet
+        if (!m_firstPacketReceived && m_stateMachine) {
+            m_firstPacketReceived = true;
+            m_stateMachine->onPacketReceived();
+        }
+
         for (char c : data) {
             if (mavlink_parse_char(MAVLINK_COMM_0,
                                    static_cast<uint8_t>(c),
                                    &msg, &status)) {
                 if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
                     m_lastHeartbeatUtc = QDateTime::currentDateTimeUtc();
-                    if (!m_linkAlive) {
-                        m_linkAlive = true;
-                        emit connectionStateChanged(true);
+                    if (m_stateMachine) {
+                        m_stateMachine->onHeartbeatReceived();
                     }
                 }
 
@@ -169,13 +193,14 @@ void MavlinkIO::onReadyRead() {
 }
 
 void MavlinkIO::onHeartbeatTimeout() {
-    if (!m_linkAlive || !m_lastHeartbeatUtc.isValid()) {
+    if (!m_lastHeartbeatUtc.isValid()) {
         return;
     }
 
     if (m_lastHeartbeatUtc.msecsTo(QDateTime::currentDateTimeUtc()) >= m_heartbeatTimeoutMs) {
-        m_linkAlive = false;
-        emit connectionStateChanged(false);
+        if (m_stateMachine) {
+            m_stateMachine->onHeartbeatTimeout();
+        }
         qWarning() << "[MavlinkIO] Heartbeat timeout after" << m_heartbeatTimeoutMs << "ms";
     }
 }

@@ -231,9 +231,9 @@ bool Application::initialize() {
         dummyTimer->start(dummyTelemetryConfig.value("intervalMs", 100).toInt());
         m_dummyTimer.reset(dummyTimer);
 
-        // Tell the UI that the dummy telemetry stream is active so the map/status
-        // bar look alive even before a real MAVLink UDP link is opened.
-        m_bus->emitConnectionStateChanged(aegis::core::types::ConnectionState::Connected);
+        // Tell the UI that the dummy telemetry stream is active.
+        // Dummy telemetry simulates a fully alive link.
+        m_bus->emitConnectionStateChanged(aegis::core::types::ConnectionState::HeartbeatAlive);
     }
 
     aegis::utils::Logger::instance().log(
@@ -283,16 +283,24 @@ void Application::setupConnections() {
             m_mainWindow.data(), &aegis::ui::MainWindow::updateSystemState);
 
     connect(m_mavlinkIO.data(), &aegis::telemetry::MavlinkIO::connectionStateChanged,
-            this, [this](bool connected) {
-        m_bus->emitConnectionStateChanged(connected
-            ? aegis::core::types::ConnectionState::Connected
-            : aegis::core::types::ConnectionState::Disconnected);
+            this, [this](aegis::core::types::ConnectionState state) {
+        m_bus->emitConnectionStateChanged(state);
     });
 
     connect(m_bus.data(), &aegis::core::TelemetryBus::connectionStateChanged,
             this, [](aegis::core::types::ConnectionState state) {
-        QString msg = (state == aegis::core::types::ConnectionState::Connected)
-                          ? "Connected" : "Disconnected";
+        QString msg;
+        using S = aegis::core::types::ConnectionState;
+        switch (state) {
+            case S::Disconnected:      msg = "Disconnected"; break;
+            case S::SocketBound:       msg = "SocketBound"; break;
+            case S::VehicleDiscovered: msg = "VehicleDiscovered"; break;
+            case S::HeartbeatAlive:    msg = "Connected"; break;
+            case S::Degraded:          msg = "Degraded"; break;
+            case S::Reconnecting:      msg = "Reconnecting"; break;
+            case S::Error:             msg = "Error"; break;
+            default:                   msg = "Unknown"; break;
+        }
         aegis::utils::Logger::instance().log(
             aegis::utils::LogLevel::Info, "Link", msg);
     });

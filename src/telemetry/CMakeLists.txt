@@ -1,6 +1,8 @@
 add_library(aegis_telemetry STATIC
     mavlink_io.hpp
     mavlink_io.cpp
+    connection_state_machine.hpp
+    connection_state_machine.cpp
     parsers.hpp
     parsers.cpp
     replay/log_replay.hpp

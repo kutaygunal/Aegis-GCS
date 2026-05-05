@@ -10,6 +10,7 @@
 #include <QDateTime>
 #include "types/mavlink_types.hpp"
 #include "core/types/common.hpp"
+#include "connection_state_machine.hpp"
 
 namespace aegis::telemetry {
 
@@ -31,7 +32,8 @@ public:
     void stop();
     void setHeartbeatTimeoutMs(int timeoutMs);
 
-    bool isConnected() const { return m_running; }
+    bool isRunning() const { return m_running; }
+    aegis::telemetry::ConnectionStateMachine::State connectionState() const;
 
     /** @brief Enqueue a MAVLink message for transmission. Thread-safe. */
     void sendMessage(const types::MavlinkMessage& msg);
@@ -44,7 +46,7 @@ public:
 
 signals:
     void messageReceived(const aegis::telemetry::types::MavlinkMessage& msg);
-    void connectionStateChanged(bool connected);
+    void connectionStateChanged(aegis::core::types::ConnectionState state);
     void parseError(const QString& reason);
 
 private slots:
@@ -60,7 +62,8 @@ private:
     QTimer* m_heartbeatTimer{nullptr};
     QTimer* m_txTimer{nullptr};
     bool m_running{false};
-    bool m_linkAlive{false};
+
+    ConnectionStateMachine* m_stateMachine{nullptr};
 
     QMutex m_txMutex;
     QQueue<types::MavlinkMessage> m_txQueue;
@@ -73,6 +76,8 @@ private:
     quint16 m_bindPort{14550};
     int m_heartbeatTimeoutMs{3000};
     QDateTime m_lastHeartbeatUtc;
+
+    bool m_firstPacketReceived{false};
 };
 
 } // namespace aegis::telemetry

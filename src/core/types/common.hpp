@@ -27,8 +27,11 @@ enum class SystemStatus {
 
 enum class ConnectionState {
     Disconnected,
-    Connecting,
-    Connected,
+    SocketBound,
+    VehicleDiscovered,
+    HeartbeatAlive,
+    Degraded,
+    Reconnecting,
     Error
 };
 
