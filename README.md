@@ -158,23 +158,27 @@ cmake --build build_cesium --config Release --parallel
 
 #### One-shot clean + build script
 
-For convenience, run the provided `build.bat` to clean all old artifacts and build a fresh Release in one step:
+For convenience, run the provided `build.bat` to clean all old artifacts and build a fresh Release in one step. It auto-detects Visual Studio 2022 and Qt — you can double-click it directly from Explorer:
 
 ```powershell
 .\build.bat
 ```
 
-The script auto-detects Qt in common install paths (or you can pass it explicitly):
+Or pass a specific Qt prefix if your install is non-standard:
 
 ```powershell
 .\build.bat "C:\Qt\6.8.2\msvc2022_64"
 ```
 
 What it does:
-1. Removes `build/`, `build_cesium/`, `build_check/`, `aegis.log`, and loose `.exe`/`.pdb`
-2. Configures CMake for Release with tests OFF
-3. Builds the project in parallel
-4. Prints a summary confirming `aegis.exe` was produced
+1. Auto-detects Visual Studio 2022 and initializes the x64 compiler environment
+2. Auto-detects Qt in common install paths (or uses the path you provide)
+3. Removes old `build/`, `build_cesium/`, `build_check/`, logs, and loose binaries
+4. Configures CMake for Release with tests OFF
+5. Builds the project in parallel
+6. Prints a summary confirming `aegis.exe` was produced
+
+> The script will **pause** at the end so you can read the output, even if the build fails.
 
 ### Linux
 
