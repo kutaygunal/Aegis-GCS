@@ -10,6 +10,7 @@
 #include "ui/dock_manager.hpp"
 #include "utils/logging.hpp"
 #include "utils/diagnostic_exporter.hpp"
+#include "utils/config_validator.hpp"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -33,122 +34,7 @@ aegis::utils::LogLevel parseLogLevel(const QString& value) {
     return aegis::utils::LogLevel::Debug;
 }
 
-QStringList defaultAutostartPlugins() {
-    return {
-        QStringLiteral("aegis.plugins.telemetry_hud"),
-        QStringLiteral("aegis.plugins.alert_console"),
-        QStringLiteral("aegis.plugins.mission_editor"),
-        QStringLiteral("aegis.plugins.map_view")
-    };
-}
-
-QVariantMap defaultPluginConfig() {
-    return {
-        {QStringLiteral("aegis.plugins.telemetry_hud"), QVariantMap{}},
-        {QStringLiteral("aegis.plugins.alert_console"), QVariantMap{
-            {QStringLiteral("maxItems"), 200},
-            {QStringLiteral("showTimestamps"), true}
-        }},
-        {QStringLiteral("aegis.plugins.mission_editor"), QVariantMap{}},
-        {QStringLiteral("aegis.plugins.map_view"), QVariantMap{
-            {QStringLiteral("zoom"), 15},
-            {QStringLiteral("tileUrlTemplate"), QStringLiteral("https://tile.openstreetmap.org/%1/%2/%3.png")}
-        }}
-    };
-}
-
-QVariantMap mergeVariantMaps(const QVariantMap& defaults, const QVariantMap& overrides) {
-    QVariantMap result = defaults;
-    for (auto it = overrides.constBegin(); it != overrides.constEnd(); ++it) {
-        if (result.value(it.key()).metaType().id() == QMetaType::QVariantMap &&
-            it.value().metaType().id() == QMetaType::QVariantMap) {
-            result.insert(it.key(), mergeVariantMaps(result.value(it.key()).toMap(), it.value().toMap()));
-        } else {
-            result.insert(it.key(), it.value());
-        }
-    }
-    return result;
-}
-
-QVariantMap defaultConfig() {
-    return {
-        {QStringLiteral("pluginPaths"), QStringList{
-            QStringLiteral("./plugins"),
-            QStringLiteral("C:/Program Files/Aegis/plugins")
-        }},
-        {QStringLiteral("autostartPlugins"), defaultAutostartPlugins()},
-        {QStringLiteral("telemetry"), QVariantMap{
-            {QStringLiteral("bindAddress"), QStringLiteral("0.0.0.0")},
-            {QStringLiteral("bindPort"), 14550},
-            {QStringLiteral("heartbeatTimeoutMs"), 3000}
-        }},
-        {QStringLiteral("logging"), QVariantMap{
-            {QStringLiteral("minLevel"), QStringLiteral("Debug")},
-            {QStringLiteral("file"), QStringLiteral("aegis.log")},
-            {QStringLiteral("maxFiles"), 5},
-            {QStringLiteral("maxSizeBytes"), 10485760}
-        }},
-        {QStringLiteral("dummyTelemetry"), QVariantMap{
-            {QStringLiteral("enabled"), true},
-            {QStringLiteral("intervalMs"), 100}
-        }},
-        {QStringLiteral("plugins"), defaultPluginConfig()}
-    };
-}
-
-QVariantMap validateAndNormalizeConfig(const QVariantMap& rawConfig) {
-    QVariantMap config = mergeVariantMaps(defaultConfig(), rawConfig);
-
-    QVariantMap telemetry = config.value("telemetry").toMap();
-    const QString bindAddress = telemetry.value("bindAddress").toString().trimmed();
-    if (QHostAddress(bindAddress).isNull()) {
-        qWarning() << "[Application] Invalid telemetry.bindAddress, using default";
-        telemetry.insert("bindAddress", QStringLiteral("0.0.0.0"));
-    }
-
-    const int bindPort = telemetry.value("bindPort").toInt();
-    telemetry.insert("bindPort", (bindPort > 0 && bindPort <= 65535) ? bindPort : 14550);
-
-    const int heartbeatTimeoutMs = telemetry.value("heartbeatTimeoutMs").toInt();
-    telemetry.insert("heartbeatTimeoutMs", heartbeatTimeoutMs > 0 ? heartbeatTimeoutMs : 3000);
-    config.insert("telemetry", telemetry);
-
-    QVariantMap logging = config.value("logging").toMap();
-    logging.insert("minLevel", [&]() -> QString {
-        const QString level = logging.value("minLevel").toString();
-        const QString normalized = level.trimmed().toLower();
-        if (normalized == "debug" || normalized == "info" || normalized == "warning" ||
-            normalized == "warn" || normalized == "error" || normalized == "critical") {
-            return level;
-        }
-        qWarning() << "[Application] Invalid logging.minLevel, using default";
-        return QStringLiteral("Debug");
-    }());
-
-    const int maxFiles = logging.value("maxFiles", 5).toInt();
-    logging.insert("maxFiles", maxFiles > 0 ? maxFiles : 5);
-    const qint64 maxSizeBytes = logging.value("maxSizeBytes", 10485760).toLongLong();
-    logging.insert("maxSizeBytes", maxSizeBytes > 0 ? maxSizeBytes : 10485760);
-    config.insert("logging", logging);
-
-    QVariantMap dummyTelemetry = config.value("dummyTelemetry").toMap();
-    const int intervalMs = dummyTelemetry.value("intervalMs").toInt();
-    dummyTelemetry.insert("intervalMs", intervalMs > 0 ? intervalMs : 100);
-    config.insert("dummyTelemetry", dummyTelemetry);
-
-    QVariantMap plugins = defaultPluginConfig();
-    plugins = mergeVariantMaps(plugins, config.value("plugins").toMap());
-
-    QVariantMap alertConsole = plugins.value("aegis.plugins.alert_console").toMap();
-    const int maxItems = alertConsole.value("maxItems", 200).toInt();
-    alertConsole.insert("maxItems", maxItems > 0 ? maxItems : 200);
-    plugins.insert("aegis.plugins.alert_console", alertConsole);
-
-    config.insert("plugins", plugins);
-    return config;
-}
-
-}
+} // namespace
 
 namespace aegis::app {
 
@@ -167,7 +53,15 @@ bool Application::initialize() {
     if (!loadConfiguration()) {
         qWarning() << "[Application] Using default configuration";
     }
-    m_config = validateAndNormalizeConfig(m_config);
+
+    // Validate config before any service initialization
+    QStringList warnings;
+    aegis::utils::ConfigValidator validator = aegis::utils::ConfigValidator::createAegisValidator();
+    m_config = validator.validate(m_config, &warnings);
+    for (const QString& w : warnings) {
+        aegis::utils::Logger::instance().log(
+            aegis::utils::LogLevel::Warning, "Config", w);
+    }
 
     // ── Core services ─────────────────────────────────────────────────
     m_bus.reset(new aegis::core::TelemetryBus(this));

@@ -5,6 +5,8 @@ add_library(aegis_utils STATIC
     simple_zip_writer.cpp
     diagnostic_exporter.hpp
     diagnostic_exporter.cpp
+    config_validator.hpp
+    config_validator.cpp
     ring_buffer.hpp
     thread_pool.hpp
     thread_pool.cpp

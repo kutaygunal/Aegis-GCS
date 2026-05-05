@@ -106,6 +106,8 @@ tasks:
     test_commands:
       - cmake --build build --config Release
       - ctest --test-dir build --output-on-failure
+    status: done
+    notes: Implemented ConfigValidator with declarative SchemaRule DSL. 11/11 tests pass. All prior tests pass.
     status: planned
 
   - id: P1-005

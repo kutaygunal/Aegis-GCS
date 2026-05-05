@@ -73,3 +73,10 @@ add_executable(test_diagnostic_exporter
 target_link_libraries(test_diagnostic_exporter PRIVATE
     aegis_core aegis_utils Qt6::Core Qt6::Test GTest::gtest_main)
 add_test(NAME DiagnosticExporter COMMAND test_diagnostic_exporter)
+
+add_executable(test_config_validator
+    utils/test_config_validator.cpp
+)
+target_link_libraries(test_config_validator PRIVATE
+    aegis_utils Qt6::Core Qt6::Test GTest::gtest_main)
+add_test(NAME ConfigValidator COMMAND test_config_validator)
