@@ -1,0 +1,549 @@
+# AEGIS GCS — Task Registry
+# Tasks are ordered by dependency. Do not start a task until all depends_on tasks are done.
+# Status values: planned | ready | in_progress | review | done | blocked
+
+---
+
+# ═══════════════════════════════════════════════════════════════
+# SPRINT 1 — Reliability Core
+# ═══════════════════════════════════════════════════════════════
+
+tasks:
+
+  - id: P1-001
+    phase: P1
+    title: Formal connection state machine
+    priority: critical
+    area: telemetry
+    risk: high
+    depends_on: []
+    acceptance:
+      - Connection states include socket_bound, vehicle_discovered, heartbeat_alive, degraded, disconnected, reconnecting.
+      - State transitions are deterministic and unit-tested.
+      - Timeout behavior is covered by simulated heartbeat or replay tests.
+      - UI receives state updates through the telemetry bus.
+      - State machine can be tested without real UDP.
+    implementation_rules:
+      - Do not mix socket ownership with UI logic.
+      - Keep the state machine independent from widgets.
+      - Keep MAVLink parsing separate from connection-state transitions.
+      - Add tests for normal heartbeat, timeout, reconnect, degraded, and disconnect scenarios.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: ready
+    notes: >
+      This replaces the current implicit connection logic in MavlinkIO.
+      The existing heartbeat timeout behavior is the seed; we formalize it
+      into an explicit state machine class (e.g., ConnectionStateMachine)
+      that MavlinkIO drives with events.
+
+  - id: P1-002
+    phase: P1
+    title: Structured rotating logs
+    priority: high
+    area: infrastructure
+    risk: medium
+    depends_on: []
+    acceptance:
+      - Logger writes to a rotating set of files (max size, max count).
+      - Log format includes timestamp, level, component, thread ID, and message.
+      - Rotation is trigger-safe (no log loss during rotation).
+      - Existing logger API remains compatible; change is internal.
+      - Config key "logging.maxFiles" and "logging.maxSizeBytes" are honored.
+    implementation_rules:
+      - Extend the existing custom thread-safe logger; do not replace it.
+      - Rotation must be atomic from the caller's perspective.
+      - Log level filtering remains at the existing entry points.
+      - Add tests for rotation boundary, thread safety, and config integration.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+  - id: P1-003
+    phase: P1
+    title: Diagnostic bundle export
+    priority: high
+    area: infrastructure
+    risk: medium
+    depends_on: [P1-002]
+    acceptance:
+      - A function/method can export a ZIP bundle containing recent logs, config JSON, and a manifest.
+      - Bundle generation is triggered via TelemetryBus signal (for UI integration) and callable directly.
+      - Manifest includes timestamp, git revision (if available), and file list.
+      - Exported bundle does not block the main thread (uses background thread or QtConcurrent).
+      - Error cases (missing log files, disk full) are handled gracefully.
+    implementation_rules:
+      - Use Qt's QZipWriter or std::filesystem + a minimal ZIP library (justify if adding dependency).
+      - Do not include sensitive data (passwords, keys) in the bundle.
+      - Bundle path is configurable via config key "diagnostics.exportPath".
+      - Add tests for bundle creation, manifest contents, and error paths.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+  - id: P1-004
+    phase: P1
+    title: Config schema validation
+    priority: high
+    area: infrastructure
+    risk: medium
+    depends_on: []
+    acceptance:
+      - A JSON schema (or equivalent declarative spec) exists for config/aegis.json.
+      - Schema covers all implemented config domains: pluginPaths, autostartPlugins, telemetry, logging, dummyTelemetry, plugins.
+      - Config is validated at load time; invalid keys/values produce warnings or errors with file:line context.
+      - Unknown keys are warned but not fatal (forward compatibility).
+      - Missing required keys use sensible built-in defaults.
+    implementation_rules:
+      - Prefer a lightweight validation approach (e.g., Qt JSON + simple validator class) over a heavy external schema library.
+      - If an external library is needed, it must be a separate task with build integration.
+      - Validation must run before any service is initialized.
+      - Add tests for valid config, missing required keys, wrong types, unknown keys, and nested plugin config errors.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+  - id: P1-005
+    phase: P1
+    title: Config migration system
+    priority: medium
+    area: infrastructure
+    risk: low
+    depends_on: [P1-004]
+    acceptance:
+      - Config file has a version field (e.g., "configVersion": 1).
+      - A migration registry maps version N to version N+1 transformations.
+      - On load, if config version is older than app target version, migrations run automatically.
+      - Migrations are pure data transforms; they do not depend on Qt services.
+      - A backup of the original config is written before migration.
+      - Migration failures are logged and the app falls back to defaults.
+    implementation_rules:
+      - Migrations are small, testable functions: (QJsonObject old) -> QJsonObject new.
+      - Keep migration functions stateless and isolated.
+      - Do not delete unknown keys during migration (preserve forward-compat data).
+      - Add tests for each migration step and for chained multi-step migrations.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+  - id: P1-006
+    phase: P1
+    title: CI hardening
+    priority: medium
+    area: infrastructure
+    risk: low
+    depends_on: []
+    acceptance:
+      - GitHub Actions workflow runs on Windows and Linux.
+      - clang-tidy checks run on the core and telemetry source.
+      - AddressSanitizer (or equivalent) runs on Linux tests.
+      - A replay regression test corpus is added: a set of .tlog or binary MAVLink files that exercise parser paths.
+      - CI fails on compiler warnings treated as errors (selectively, not globally).
+    implementation_rules:
+      - Extend existing .github/workflows/; do not replace the whole CI system.
+      - clang-tidy config should start permissive and tighten over time.
+      - Replay corpus files go in tests/data/replay/ and are committed as LFS or small binary.
+      - Sanitizer failures must fail the CI job.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+      - (In CI) clang-tidy --config-file=.clang-tidy src/core/ src/telemetry/
+    status: planned
+
+
+# ═══════════════════════════════════════════════════════════════
+# SPRINT 2 — Safety Core
+# ═══════════════════════════════════════════════════════════════
+
+  - id: P2-001
+    phase: P2
+    title: MAVLink command ACK handling
+    priority: critical
+    area: telemetry
+    risk: high
+    depends_on: [P1-001]
+    acceptance:
+      - A MavlinkCommander service exists for sending commands and receiving ACK/NAK.
+      - Commands are assigned sequence numbers and tracked until ACK, NAK, or timeout.
+      - Retry logic is configurable (max retries, timeout per command type).
+      - Command result states: pending, ack, nak, timeout, retrying.
+      - Results are emitted on TelemetryBus for UI/plugins to observe.
+      - Command service can be unit-tested without a real UDP socket.
+    implementation_rules:
+      - Keep MavlinkCommander separate from MavlinkParser and MavlinkIO.
+      - Do not let UI widgets call sendto() directly.
+      - Sequence numbers must be monotonic and thread-safe.
+      - Add mock/fake transport for testing ACK/NAK/timeout paths.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+  - id: P2-002
+    phase: P2
+    title: Command confirmation workflow
+    priority: critical
+    area: safety
+    risk: high
+    depends_on: [P2-001]
+    acceptance:
+      - Safety-critical commands (ARM, DISARM, mission upload, RTL, emergency) require confirmation.
+      - Confirmation is enforced in the command service, not just the UI.
+      - A "confirmed" flag must be present in the VehicleCommand before MavlinkCommander will enqueue it.
+      - Unconfirmed safety-critical commands are rejected with a clear reason.
+      - Confirmation timeout: if not confirmed within N seconds, the command is dropped.
+      - The confirmation API is usable by both UI and headless/test paths.
+    implementation_rules:
+      - Extend VehicleCommand with a confirmation requirement and confirmation flag.
+      - MavlinkCommander gates confirmed vs unconfirmed commands.
+      - Do not put confirmation logic in widgets.
+      - Add tests for confirmed success, unconfirmed rejection, and timeout.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+  - id: P2-003
+    phase: P2
+    title: Failsafe alerting
+    priority: high
+    area: safety
+    risk: high
+    depends_on: [P1-001, P2-001]
+    acceptance:
+      - A FailsafeMonitor watches telemetry and emits alerts for configured conditions.
+      - Implemented conditions: heartbeat lost, GPS lost, low battery, EKF unhealthy, RC lost, geofence breach.
+      - Each condition has configurable thresholds (e.g., battery threshold %, heartbeat timeout ms).
+      - Alerts are published on TelemetryBus with severity and condition ID.
+      - Alerts are deduplicated (no spam on sustained violation).
+      - Recovery: when a condition clears, a "recovered" event is published.
+      - Can be tested with simulated telemetry injection.
+    implementation_rules:
+      - FailsafeMonitor reads from VehicleState and TelemetryBus only; it does not own sockets.
+      - Thresholds are configurable via config JSON under "failsafe" domain.
+      - Use hysteresis to avoid flapping (e.g., low battery alert at 20%, recover at 25%).
+      - Keep alert logic separate from command logic.
+      - Add tests for each condition, threshold boundary, hysteresis, dedup, and recovery.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+  - id: P2-004
+    phase: P2
+    title: Tamper-evident audit log
+    priority: high
+    area: safety
+    risk: medium
+    depends_on: [P2-001, P2-002]
+    acceptance:
+      - An AuditLog service records every command request, command result, mode change, and failsafe event.
+      - Entries are append-only and include timestamp, actor, action, parameters, and outcome.
+      - Each entry includes a hash chain (previous entry hash + current content -> current hash).
+      - The log file is tamper-evident: any modification breaks the hash chain.
+      - A utility function can verify the full chain and report the first broken link.
+      - Audit log path is configurable; rotation policy is defined.
+    implementation_rules:
+      - Use a simple hash (SHA-256 via Qt or std). Do not add a crypto library dependency unless justified.
+      - Keep the audit log separate from the rotating debug log (different purpose, different audience).
+      - Do not log sensitive data (encryption keys, passwords).
+      - Add tests for append, hash chain integrity, tamper detection, and verification.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+  - id: P2-005
+    phase: P2
+    title: Read-only/demo/operator modes
+    priority: medium
+    area: safety
+    risk: medium
+    depends_on: [P2-002]
+    acceptance:
+      - The application supports three control modes: read-only (viewer), demo (simulated telemetry, no commands), operator (full control).
+      - Mode is set at startup via config or command-line argument.
+      - In read-only mode, all command-enqueue paths are blocked at the command service level.
+      - In demo mode, dummy telemetry runs but the command service rejects all outbound commands.
+      - Mode is observable on TelemetryBus so UI can show mode indicator and disable/hide command buttons.
+      - Mode change requires app restart (no runtime switching to prevent accidental escalation).
+    implementation_rules:
+      - The mode gate lives in MavlinkCommander or a dedicated CommandPolicy service.
+      - UI reads mode from TelemetryBus; it does not decide policy.
+      - Do not sprinkle mode checks across every widget; centralize them.
+      - Add tests for each mode: command acceptance/rejection, dummy telemetry behavior, and bus emissions.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+
+# ═══════════════════════════════════════════════════════════════
+# SPRINT 3 — Real GCS Core
+# ═══════════════════════════════════════════════════════════════
+
+  - id: P3-001
+    phase: P3
+    title: Mission protocol download
+    priority: high
+    area: mission
+    risk: high
+    depends_on: [P2-001, P2-002]
+    acceptance:
+      - MavlinkCommander can initiate a MISSION_REQUEST_LIST sequence.
+      - The system receives MISSION_COUNT, then requests each waypoint with MISSION_REQUEST.
+      - Received MISSION_ITEM_INT messages are parsed into an internal Mission model.
+      - The full mission is validated (coordinate bounds, command type support) before storage.
+      - Progress is emitted on TelemetryBus (count received, current item, total).
+      - Timeouts and retries are handled per the command ACK framework.
+      - Can be tested with a mock MAVLink responder.
+    implementation_rules:
+      - Keep mission model separate from UI; UI observes MissionState.
+      - Reuse MavlinkCommander for sequencing and retry.
+      - Do not block the main thread during download.
+      - Add tests for full download, partial download, timeout, retry, and invalid item rejection.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+  - id: P3-002
+    phase: P3
+    title: Mission protocol upload
+    priority: high
+    area: mission
+    risk: high
+    depends_on: [P3-001]
+    acceptance:
+      - MavlinkCommander can initiate MISSION_COUNT, then send MISSION_ITEM_INT for each waypoint.
+      - The system waits for MISSION_REQUEST after each item, and for MISSION_ACK after the last.
+      - Upload progress is emitted on TelemetryBus.
+      - The upload sequence can be cancelled.
+      - Timeouts and retries are handled per the command ACK framework.
+      - Can be tested with a mock MAVLink responder.
+    implementation_rules:
+      - Reuse MavlinkCommander for sequencing and retry.
+      - Keep upload state in a dedicated MissionUploader class, not in UI.
+      - Support cancellation cleanly: stop sending and emit cancelled state.
+      - Add tests for full upload, partial upload, cancellation, timeout, retry, and NAK handling.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+  - id: P3-003
+    phase: P3
+    title: Mission clear
+    priority: medium
+    area: mission
+    risk: medium
+    depends_on: [P2-001, P2-002]
+    acceptance:
+      - MavlinkCommander sends MISSION_CLEAR_ALL and waits for MISSION_ACK.
+      - On success, the internal Mission model is cleared.
+      - On failure, the error is emitted on TelemetryBus and the existing mission is preserved.
+      - Requires command confirmation (safety-critical).
+    implementation_rules:
+      - Reuse MavlinkCommander and confirmation gate.
+      - Clear operation is atomic from the user's perspective.
+      - Add tests for success, NAK, timeout, and unconfirmed rejection.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+  - id: P3-004
+    phase: P3
+    title: Mission ACK handling
+    priority: medium
+    area: mission
+    risk: medium
+    depends_on: [P2-001]
+    acceptance:
+      - The parser and command service correctly handle MAV_MISSION_RESULT codes.
+      - Each result code maps to a typed enum (Accepted, Error, UnsupportedFrame, etc.).
+      - Result codes are propagated to the UI through TelemetryBus.
+      - Unknown/future result codes are handled gracefully (logged as unknown, not crashed).
+    implementation_rules:
+      - Extend MavlinkParser with mission result decoding.
+      - Extend MavlinkCommander with mission-specific result handling.
+      - Add tests for each known result code and for unknown codes.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+  - id: P3-005
+    phase: P3
+    title: Parameter protocol download
+    priority: high
+    area: parameter
+    risk: high
+    depends_on: [P2-001, P2-002]
+    acceptance:
+      - MavlinkCommander can initiate PARAM_REQUEST_LIST.
+      - The system receives PARAM_VALUE messages and builds an internal ParameterStore.
+      - Progress is emitted on TelemetryBus.
+      - Timeouts and retries are handled per the command ACK framework.
+      - Parameters are stored with ID, value, type, and MAV_PARAM_TYPE.
+      - Can be tested with a mock MAVLink responder.
+    implementation_rules:
+      - Keep ParameterStore separate from UI; UI observes ParameterState.
+      - Reuse MavlinkCommander for sequencing and retry.
+      - Do not block the main thread during download.
+      - Add tests for full download, partial download, timeout, retry, and type handling.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+  - id: P3-006
+    phase: P3
+    title: Parameter edit, search, and diff
+    priority: medium
+    area: parameter
+    risk: medium
+    depends_on: [P3-005]
+    acceptance:
+      - ParameterStore supports search by ID substring and filter by type.
+      - Edited parameters are staged before commit; commit sends PARAM_SET and waits for PARAM_VALUE ACK.
+      - A diff view shows current vs. default vs. onboard values.
+      - Import/export to/from JSON/CSV is supported.
+      - Changes are validated (range checks, type checks) before sending.
+      - Can be tested without a real vehicle.
+    implementation_rules:
+      - Search/filter logic is in ParameterStore, not UI.
+      - Commit uses MavlinkCommander with confirmation gate for safety-critical params.
+      - Import/export is file I/O only; no network.
+      - Add tests for search, filter, diff, edit staging, commit success, commit NAK, import, and export.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
+
+# ═══════════════════════════════════════════════════════════════
+# Backlog — Future Phases (P4-P8)
+# ═══════════════════════════════════════════════════════════════
+
+  - id: P4-001
+    phase: P4
+    title: Tile disk cache
+    priority: medium
+    area: map
+    risk: low
+    depends_on: []
+    status: planned
+
+  - id: P4-002
+    phase: P4
+    title: Offline MBTiles support
+    priority: medium
+    area: map
+    risk: medium
+    depends_on: [P4-001]
+    status: planned
+
+  - id: P4-003
+    phase: P4
+    title: Multiple map providers
+    priority: medium
+    area: map
+    risk: low
+    depends_on: [P4-001]
+    status: planned
+
+  - id: P5-001
+    phase: P5
+    title: Workspace presets
+    priority: medium
+    area: ui
+    risk: low
+    depends_on: []
+    status: planned
+
+  - id: P5-002
+    phase: P5
+    title: Dock layout persistence and reset
+    priority: medium
+    area: ui
+    risk: low
+    depends_on: []
+    status: planned
+
+  - id: P6-001
+    phase: P6
+    title: User accounts and roles
+    priority: low
+    area: security
+    risk: high
+    depends_on: [P2-005]
+    status: planned
+
+  - id: P6-002
+    phase: P6
+    title: MAVLink signing support
+    priority: low
+    area: security
+    risk: high
+    depends_on: [P2-001]
+    status: planned
+
+  - id: P7-001
+    phase: P7
+    title: Stable plugin SDK with ABI checks
+    priority: medium
+    area: architecture
+    risk: medium
+    depends_on: []
+    status: planned
+
+  - id: P7-002
+    phase: P7
+    title: Service registry for plugins
+    priority: medium
+    area: architecture
+    risk: medium
+    depends_on: [P7-001]
+    status: planned
+
+  - id: P7-003
+    phase: P7
+    title: Multi-vehicle state model
+    priority: high
+    area: architecture
+    risk: high
+    depends_on: [P1-001, P7-002]
+    status: planned
+
+  - id: P7-004
+    phase: P7
+    title: Headless core mode
+    priority: low
+    area: architecture
+    risk: medium
+    depends_on: [P7-002]
+    status: planned
+
+  - id: P7-005
+    phase: P7
+    title: Remote API (WebSocket/REST/gRPC)
+    priority: low
+    area: architecture
+    risk: high
+    depends_on: [P7-004]
+    status: planned
+
+  - id: P8-001
+    phase: P8
+    title: AI-assisted diagnostics
+    priority: low
+    area: differentiator
+    risk: high
+    depends_on: [P2-003, P7-005]
+    status: planned

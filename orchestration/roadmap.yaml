@@ -1,0 +1,165 @@
+# AEGIS GCS — Engineering Roadmap
+# Phases ordered by priority. Each phase contains goals and high-level deliverables.
+# Concrete tasks are defined in tasks.yaml.
+
+phases:
+
+  - id: P0
+    name: "Completed Foundation"
+    status: done
+    goals:
+      - Establish Qt6/C++20 project scaffold
+      - Implement runtime plugin architecture
+      - Build telemetry bus + shared vehicle state
+      - Create native Qt map plugin with OSM raster tiles
+      - Add Windows plugin deployment
+      - Add config-driven telemetry/logging/plugin settings
+      - Implement heartbeat-based connection state and timeout handling
+      - Add initial parser/replay/UDP test coverage
+    deliverables:
+      - Working build system (CMake, MSVC 2022, build.bat)
+      - PluginHost with QPluginLoader discovery
+      - TelemetryBus and VehicleState
+      - MavlinkIO UDP layer + MavlinkParser (6 message types)
+      - LogReplay service
+      - Map View plugin (QGraphicsView + OSM tiles)
+      - Telemetry HUD, Alert Console, Mission Editor plugins
+      - GoogleTest + Qt Test coverage for bus/state/parser/replay/IO
+
+  - id: P1
+    name: "Sprint 1 — Reliability Core"
+    status: ready
+    goals:
+      - Replace implicit connection logic with formal state machine
+      - Add structured rotating logs with diagnostic bundle export
+      - Validate and migrate configuration schemas
+      - Harden CI with static analysis, sanitizers, and regression tests
+    deliverables:
+      - Deterministic connection state machine (6 states)
+      - Rotating file logger with diagnostic bundle ZIP export
+      - JSON config schema validation + versioned migration
+      - GitHub Actions: clang-tidy, AddressSanitizer, replay regression
+
+  - id: P2
+    name: "Sprint 2 — Safety Core"
+    status: planned
+    goals:
+      - Add MAVLink command ACK handling
+      - Implement command confirmation workflow
+      - Build failsafe alerting system
+      - Create tamper-evident audit log
+      - Separate read-only/demo/operator control modes
+    deliverables:
+      - MavlinkCommander service with ACK/NAK/retry/timeout
+      - Confirmation gate for safety-critical commands
+      - Failsafe rule engine (heartbeat lost, GPS lost, low battery, etc.)
+      - Append-only command/event audit log with hash chain
+      - Mode gate: viewer / demo / operator
+
+  - id: P3
+    name: "Sprint 3 — Real GCS Functionality"
+    status: planned
+    goals:
+      - Implement full MAVLink mission protocol
+      - Implement MAVLink parameter protocol
+      - Add mission planning tools
+      - Add flight log recording and telemetry graphing
+    deliverables:
+      - Mission download, upload, clear, partial update, ACK handling
+      - Parameter download, edit, search, filter, diff, import/export
+      - Drag/drop waypoint editing, survey grid, corridor scan, orbit
+      - Mission validation: altitude, geofence, battery, link estimates
+      - Geofence and rally point editor
+      - Flight log recording + replay timeline
+      - Telemetry graphing dashboard
+      - Export to CSV/JSON + flight report generation
+
+  - id: P4
+    name: "Phase 4 — Map and Navigation"
+    status: planned
+    goals:
+      - Add offline map support
+      - Support multiple map providers
+      - Add measurement and traffic overlays
+      - Optional WebEngine/Cesium 3D globe
+    deliverables:
+      - Tile disk cache + offline MBTiles support
+      - Multiple providers: OSM, satellite, terrain, enterprise
+      - Map attribution and rate-limit controls
+      - Mouse panning, zoom-to-vehicle, follow-vehicle
+      - Home marker, trail persistence, RTH visualization
+      - Distance/bearing measurement tool
+      - No-fly zone and ADS-B overlays
+      - Optional Cesium 3D globe bridge
+
+  - id: P5
+    name: "Phase 5 — UI/UX and Operator Workflow"
+    status: planned
+    goals:
+      - Improve operator workflow and workspace management
+      - Add audio alerts and notifications
+      - Add setup wizards and accessibility pass
+    deliverables:
+      - Workspace presets (pilot, planner, diagnostics, replay)
+      - Robust dock layout persistence + reset
+      - Plugin manager UI for load/unload
+      - Command palette and keyboard shortcuts
+      - Audio alerts and notification center
+      - Rich status bar (GPS, satellites, battery, link quality)
+      - First-run and vehicle/link setup wizards
+      - High-DPI polish, theme customization, accessibility
+
+  - id: P6
+    name: "Phase 6 — Security and Enterprise Readiness"
+    status: planned
+    goals:
+      - Add user accounts, roles, and permissions
+      - Secure plugins, MAVLink signing, encrypted config
+      - Add licensing, installer, and updater
+    deliverables:
+      - User accounts and roles: viewer, operator, maintainer, admin
+      - Permission system for commands and plugins
+      - Signed plugins and allowlist
+      - MAVLink signing support
+      - Encrypted secrets/config storage
+      - Secure auto-update channel
+      - License activation, offline licensing, edition gating
+      - Installer, portable mode, enterprise deployment profile
+
+  - id: P7
+    name: "Phase 7 — Architecture and Extensibility"
+    status: planned
+    goals:
+      - Stabilize plugin SDK and service registry
+      - Support multi-vehicle and headless operation
+      - Add remote API for automation
+    deliverables:
+      - Stable plugin SDK with ABI/version compatibility
+      - Service registry for plugins
+      - Typed event bus with stronger domain models
+      - Multi-vehicle state model and fleet view
+      - Separated telemetry/mission/map/command/replay services
+      - Dependency injection for testability
+      - Headless core mode
+      - Remote API: WebSocket, REST, or gRPC
+
+  - id: P8
+    name: "Phase 8 — Differentiators"
+    status: future
+    goals:
+      - Add AI-assisted diagnostics
+      - Add cloud collaboration
+      - Add advanced analytics
+    deliverables:
+      - AI-assisted diagnostics and anomaly detection
+      - Mission risk scoring
+      - Battery sag, vibration, GPS drift, link instability detection
+      - Cloud sync and collaboration mode
+      - Advanced analytics and post-flight reports
+
+---
+# Dependency summary across phases
+# P1 has no external dependencies (builds on P0 foundation already in repo)
+# P2 depends on P1 (command service needs reliable connection state)
+# P3 depends on P2 (mission/parameter protocol needs command ACK + safety)
+# P4-P8 have internal dependencies documented in tasks.yaml
