@@ -41,6 +41,7 @@ public:
     void emitAlert(types::AlertLevel level, const QString& message);
     void emitConnectionStateChanged(types::ConnectionState state);
     void emitCommandResponse(quint16 commandId, bool success, const QString& message);
+    void emitDiagnosticExportRequested(const QString& path);
 
     // ── Generic topic-based pub/sub ───────────────────────────────────
     void subscribe(const QString& topic, QObject* subscriber,
@@ -62,6 +63,7 @@ signals:
     void alertRaised(aegis::core::types::AlertLevel level, const QString& message);
     void connectionStateChanged(aegis::core::types::ConnectionState state);
     void commandResponse(quint16 commandId, bool success, const QString& message);
+    void diagnosticExportRequested(const QString& path);
 
     void outboundCommand(const aegis::core::types::VehicleCommand& cmd);
 

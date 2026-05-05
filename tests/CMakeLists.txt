@@ -66,3 +66,10 @@ add_executable(test_mavlink_io
 target_link_libraries(test_mavlink_io PRIVATE
     aegis_core aegis_telemetry Qt6::Core Qt6::Network Qt6::Test GTest::gtest_main)
 add_test(NAME MavlinkIO COMMAND test_mavlink_io)
+
+add_executable(test_diagnostic_exporter
+    utils/test_diagnostic_exporter.cpp
+)
+target_link_libraries(test_diagnostic_exporter PRIVATE
+    aegis_core aegis_utils Qt6::Core Qt6::Test GTest::gtest_main)
+add_test(NAME DiagnosticExporter COMMAND test_diagnostic_exporter)

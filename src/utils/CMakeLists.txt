@@ -1,6 +1,10 @@
 add_library(aegis_utils STATIC
     logging.hpp
     logging.cpp
+    simple_zip_writer.hpp
+    simple_zip_writer.cpp
+    diagnostic_exporter.hpp
+    diagnostic_exporter.cpp
     ring_buffer.hpp
     thread_pool.hpp
     thread_pool.cpp

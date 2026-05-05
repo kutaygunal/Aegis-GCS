@@ -21,6 +21,9 @@
         "enabled": true,
         "intervalMs": 100
     },
+    "diagnostics": {
+        "exportPath": "aegis-diagnostics.zip"
+    },
     "plugins": {
         "aegis.plugins.telemetry_hud": {},
         "aegis.plugins.alert_console": {

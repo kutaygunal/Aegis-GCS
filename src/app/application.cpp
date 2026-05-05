@@ -9,6 +9,7 @@
 #include "ui/main_window.hpp"
 #include "ui/dock_manager.hpp"
 #include "utils/logging.hpp"
+#include "utils/diagnostic_exporter.hpp"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -205,6 +206,32 @@ bool Application::initialize() {
     aegis::utils::Logger::instance().setRotation(
         loggingConfig.value("maxSizeBytes", 10485760).toLongLong(),
         loggingConfig.value("maxFiles", 5).toInt());
+
+    // ── Diagnostic exporter ───────────────────────────────────────────
+    const QVariantMap diagnosticsConfig = m_config.value("diagnostics").toMap();
+    QString exportPath = diagnosticsConfig.value("exportPath").toString();
+    if (exportPath.isEmpty()) {
+        exportPath = QDir::currentPath() + "/aegis-diagnostics.zip";
+    }
+    m_diagnosticExporter.reset(new aegis::utils::DiagnosticExporter(
+        logFile,
+        loggingConfig.value("maxFiles", 5).toInt(),
+        "config/aegis.json",
+        this));
+    connect(m_bus.data(), &aegis::core::TelemetryBus::diagnosticExportRequested,
+            m_diagnosticExporter.data(), &aegis::utils::DiagnosticExporter::onExportRequested);
+    connect(m_diagnosticExporter.data(), &aegis::utils::DiagnosticExporter::exportFinished,
+            this, [](bool success, const QString& path, const QString& error) {
+        if (success) {
+            aegis::utils::Logger::instance().log(
+                aegis::utils::LogLevel::Info, "Diagnostics",
+                QStringLiteral("Bundle exported: %1").arg(path));
+        } else {
+            aegis::utils::Logger::instance().log(
+                aegis::utils::LogLevel::Error, "Diagnostics",
+                QStringLiteral("Export failed: %1").arg(error));
+        }
+    });
 
     // ── UI layer ──────────────────────────────────────────────────────
     m_mainWindow.reset(new aegis::ui::MainWindow());

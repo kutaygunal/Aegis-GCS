@@ -21,6 +21,10 @@ namespace aegis::ui {
     class MainWindow;
 }
 
+namespace aegis::utils {
+    class DiagnosticExporter;
+}
+
 namespace aegis::app {
 
 /**
@@ -63,6 +67,7 @@ private:
     QScopedPointer<aegis::telemetry::MavlinkIO> m_mavlinkIO;
     QScopedPointer<aegis::telemetry::MavlinkParser> m_mavlinkParser;
     QScopedPointer<aegis::telemetry::LogReplay> m_logReplay;
+    QScopedPointer<aegis::utils::DiagnosticExporter> m_diagnosticExporter;
     QScopedPointer<aegis::ui::MainWindow> m_mainWindow;
     QScopedPointer<QTimer> m_dummyTimer;
 

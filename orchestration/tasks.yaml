@@ -81,6 +81,8 @@ tasks:
     test_commands:
       - cmake --build build --config Release
       - ctest --test-dir build --output-on-failure
+    status: done
+    notes: Implemented DiagnosticExporter with inline SimpleZipWriter. 7/7 tests pass.
     status: planned
 
   - id: P1-004

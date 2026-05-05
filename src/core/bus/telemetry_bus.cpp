@@ -57,6 +57,10 @@ void TelemetryBus::emitCommandResponse(quint16 commandId, bool success,
     emit commandResponse(commandId, success, message);
 }
 
+void TelemetryBus::emitDiagnosticExportRequested(const QString& path) {
+    emit diagnosticExportRequested(path);
+}
+
 // ── Generic topic pub/sub ─────────────────────────────────────────────
 void TelemetryBus::subscribe(const QString& topic, QObject* subscriber,
                              std::function<void(const QVariant&)> callback) {
