@@ -15,11 +15,13 @@ AEGIS GCS is a **desktop Ground Control Station** written in **C++20** with **Qt
 - Runtime plugin discovery and loading
 - Telemetry HUD plugin
 - Alert Console plugin
-- Mission Editor plugin
-- Native 2D Map View plugin
+- Mission Editor plugin (waypoint table and command-source scaffold)
+- Native 2D Map View plugin with OpenStreetMap raster tiles
 - Dummy telemetry generator for offline UI testing
+- MAVLink log replay service (binary frame replay into the live parser path)
 - Dark Qt Widgets operator shell
 - Windows Qt runtime deployment via `windeployqt`
+- Growing unit and integration test suite (GoogleTest + Qt Test)
 
 ### Current map implementation
 
@@ -49,6 +51,8 @@ The map plugin currently uses a **native Qt `QGraphicsView` / `QGraphicsScene` 2
 │  • TelemetryBus                                           │
 │  • VehicleState                                           │
 │  • PluginHost                                             │
+│  • Shared Types (AttitudeData, PositionData, BatteryData,│
+│    SystemState, VehicleCommand)                           │
 ├────────────────────────────────────────────────────────────┤
 │ Telemetry Layer                                           │
 │  • MavlinkIO                                              │
@@ -56,6 +60,16 @@ The map plugin currently uses a **native Qt `QGraphicsView` / `QGraphicsScene` 2
 │  • LogReplay                                              │
 └────────────────────────────────────────────────────────────┘
 ```
+
+### Telemetry Pipeline
+
+Live MAVLink frames flow through a dedicated worker thread and are delivered to the main thread via Qt queued connections:
+
+```text
+UDP Socket → MavlinkIO → MavlinkParser → VehicleState + TelemetryBus → UI/Plugins
+```
+
+**Important design decision:** socket bind success is **not** treated as a vehicle connection. A vehicle is considered connected only after a valid MAVLink heartbeat is received. If no heartbeat arrives within the configured timeout, the system emits disconnected.
 
 ---
 
@@ -72,8 +86,8 @@ The map plugin currently uses a **native Qt `QGraphicsView` / `QGraphicsScene` 2
 | State Bus | Qt Signals & Slots |
 | Threading | `QThread`, `QReadWriteLock`, `QMutex` |
 | Logging | Custom thread-safe logger |
-| Testing | GoogleTest |
-| CI/CD | GitHub Actions |
+| Testing | GoogleTest + Qt Test |
+| CI/CD | GitHub Actions (Linux + Windows build/test jobs) |
 
 ---
 
@@ -158,6 +172,14 @@ cmake --build build --parallel
 ./build/aegis
 ```
 
+### Building with Tests
+
+```powershell
+cmake -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.8.2/msvc2022_64" -DAEGIS_BUILD_TESTS=ON
+cmake --build build --config Release --parallel
+ctest --test-dir build --output-on-failure -C Release
+```
+
 ---
 
 ## Runtime Notes
@@ -189,6 +211,15 @@ build_cesium/Release/plugins/
 - Dummy telemetry starts automatically for offline testing
 - Status bar shows connection + vehicle mode/armed state
 
+### Current UI Features
+
+- Dark operator theme via `ThemeEngine`
+- File menu for opening replay logs
+- Connect menu and toolbar action for UDP MAVLink
+- Status bar connection indicator
+- Vehicle armed/mode display derived from heartbeat state
+- Plugin injection and basic dock/tab management
+
 ---
 
 ## Configuration
@@ -199,12 +230,39 @@ Runtime configuration lives in:
 config/aegis.json
 ```
 
-Important keys:
+### Implemented Config Domains
 
-- `pluginPaths`
-- `autostartPlugins`
-- telemetry bind configuration
-- logging configuration
+| Domain | Purpose |
+|---|---|
+| `pluginPaths` | Additional directories for plugin discovery |
+| `autostartPlugins` | Plugin IDs to load at startup |
+| `telemetry` | UDP bind address, bind port, heartbeat timeout |
+| `logging` | Minimum log level and log file path |
+| `dummyTelemetry` | Offline/demo telemetry generator enablement and interval |
+| `plugins` | Per-plugin settings passed to each plugin during initialization |
+
+### Example Snippet
+
+```json
+{
+  "telemetry": {
+    "bindAddress": "0.0.0.0",
+    "bindPort": 14550,
+    "heartbeatTimeoutMs": 3000
+  },
+  "dummyTelemetry": { "enabled": true, "intervalMs": 100 },
+  "plugins": {
+    "aegis.plugins.map_view": {
+      "zoom": 15,
+      "tileUrlTemplate": "https://tile.openstreetmap.org/%1/%2/%3.png"
+    },
+    "aegis.plugins.alert_console": {
+      "maxItems": 250,
+      "showTimestamps": true
+    }
+  }
+}
+```
 
 ---
 
@@ -220,6 +278,46 @@ Important keys:
 | Blank center panel | Rebuild after config/layout fixes; the active implementation now injects the map as the main central widget |
 
 ---
+
+## MAVLink Coverage
+
+The parser currently decodes the following MAVLink 2 messages:
+
+| MAVLink Message | AEGIS Output |
+|---|---|
+| `HEARTBEAT` | System ID/component, base mode, custom mode, armed state, system status |
+| `ATTITUDE` | Roll, pitch, yaw, angular rates |
+| `GLOBAL_POSITION_INT` | Latitude, longitude, altitude, relative altitude, velocity, heading |
+| `BATTERY_STATUS` | Remaining percentage, voltage, current |
+| `MISSION_CURRENT` | Current mission index |
+| `STATUSTEXT` | Alert severity mapping and alert console output |
+
+## Map Implementation Details
+
+The map plugin uses native Qt graphics (no embedded browser):
+
+| Feature | Implementation |
+|---|---|
+| Tile provider | Configurable URL template, defaulting to `https://tile.openstreetmap.org/%1/%2/%3.png` |
+| Projection | Web Mercator tile coordinate formula |
+| Networking | `QNetworkAccessManager` and `QNetworkReply` |
+| Rendering | `QGraphicsView`, `QGraphicsScene`, pixmap tile items, path overlay, marker overlay |
+| Zoom | Changes OSM tile zoom level and refreshes tile set |
+
+> **Operational note:** OSM tile usage requires respecting the OpenStreetMap tile policy. A commercial deployment should add tile caching, provider attribution, rate limiting, and preferably a dedicated commercial tile provider or offline MBTiles support.
+
+## Testing
+
+Current automated test targets:
+
+| Test Target | Coverage |
+|---|---|
+| `test_telemetry_bus` | Signal delivery, topic pub/sub, outbound commands, command responses |
+| `test_vehicle_state` | Thread-safe state update/getter behavior |
+| `test_ring_buffer` | Fixed-size telemetry history behavior |
+| `test_parsers` | HEARTBEAT, ATTITUDE, GLOBAL_POSITION_INT, BATTERY_STATUS |
+| `test_log_replay` | Replay step and playback completion/progress |
+| `test_mavlink_io` | UDP heartbeat connection and timeout disconnection |
 
 ## Plugin Development
 
@@ -244,27 +342,118 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 
 ---
 
+## Commercial-Grade Readiness Snapshot
+
+| Area | Current State | Commercial Next Step |
+|---|---|---|
+| Architecture | Modular and plugin-based | Stabilize plugin SDK/ABI and add service registry |
+| Telemetry | Selected MAVLink messages decoded | Complete mission, parameter, command ACK, signing, and multi-vehicle support |
+| Map | Real OSM online tile layer | Add offline cache, provider attribution, commercial provider, and geofence editing |
+| Safety | Heartbeat timeout and alerts scaffold | Add full failsafe rules, command confirmation, and audit logging |
+| Testing | Growing unit/integration test suite | Add fuzzing, UI smoke tests, sanitizers, replay regression corpus, and hardware-in-loop tests |
+| Deployment | Build and Windows runtime deployment scaffold | Add installer, updater, crash reporter, license management, and diagnostics export |
+
 ## Current Limitations
 
-- The map is currently a **2D native Qt scene**, not a real tiled globe or Cesium bridge
-- MAVLink parsing is still partial / scaffolded
-- Mission editing is basic
+- The map uses native Qt/OpenStreetMap raster tiles, not a 3D globe or Cesium bridge
+- Online map tiles require network access unless an offline cache/provider is added
+- MAVLink coverage is still partial compared to mature GCS products
+- Mission editing is basic and does not yet implement the full MAVLink mission protocol
 - Saved advanced dock layout restore is currently intentionally simplified to avoid hiding active plugin panels
 
 ---
 
 ## Roadmap
 
+### Completed Foundation
+
 - [x] Qt6/C++20 project scaffold
 - [x] Runtime plugin architecture
 - [x] Telemetry bus + shared vehicle state
-- [x] Native 2D map plugin
+- [x] Native Qt map plugin
+- [x] OpenStreetMap raster tile support
 - [x] Windows plugin deployment into `Release/plugins`
-- [ ] Full MAVLink integration
-- [ ] Real map tiles or WebEngine/Cesium integration
-- [ ] Mission upload/download refinement
-- [ ] Better dock/workspace persistence
-- [ ] Additional automated tests
+- [x] Config-driven telemetry/logging/plugin settings
+- [x] Heartbeat-based connection state and timeout handling
+- [x] Initial parser/replay/UDP test coverage
+
+### Phase 1 — Commercial-Grade Foundation
+
+- [ ] Formal connection state machine: socket bound, vehicle discovered, heartbeat alive, degraded, disconnected, reconnecting
+- [ ] Config schema validation and migration system
+- [ ] Structured rotating logs and diagnostic bundle export
+- [ ] Crash reporting and recovery workflow
+- [ ] MAVLink command ACK handling
+- [ ] Failsafe alerting: heartbeat lost, GPS lost, low battery, EKF unhealthy, RC lost, geofence breach
+- [ ] Command confirmation workflow for arm/disarm, mission upload, RTL, and emergency commands
+- [ ] Tamper-evident command/event audit log
+- [ ] Read-only/demo/operator modes separated from real control mode
+- [ ] CI hardening with static analysis, sanitizers, and replay regression tests
+
+### Phase 2 — Real GCS Functionality
+
+- [ ] Full MAVLink mission protocol: download, upload, clear, partial update, ACK handling
+- [ ] Parameter protocol: download, edit, search/filter, diff, import/export
+- [ ] Mission planning tools: drag/drop waypoints, survey grid, corridor scan, orbit/circle, terrain following
+- [ ] Mission validation: altitude limits, geofence violations, battery estimate, link/range estimate
+- [ ] Geofence and rally point editor
+- [ ] Better mode decoding for PX4 and ArduPilot
+- [ ] Flight log recording and replay timeline
+- [ ] Telemetry graphing dashboard and event timeline
+- [ ] Export telemetry to CSV/JSON and generate flight reports
+
+### Phase 3 — Map and Navigation
+
+- [ ] Tile disk cache
+- [ ] Offline maps and MBTiles support
+- [ ] Multiple map providers: OSM, satellite, terrain, enterprise/custom tile servers
+- [ ] Map provider attribution and rate-limit controls
+- [ ] Mouse panning, zoom-to-vehicle, and follow-vehicle toggle
+- [ ] Home position marker, vehicle trail persistence, and return-to-home visualization
+- [ ] Distance/bearing measurement tool
+- [ ] No-fly zone and ADS-B/traffic overlays
+- [ ] Optional WebEngine/Cesium 3D globe integration
+
+### Phase 4 — UI/UX and Operator Workflow
+
+- [ ] Workspace presets: pilot, mission planner, diagnostics, replay analysis
+- [ ] Robust dock layout persistence and reset workflow
+- [ ] Plugin manager and plugin load/unload UI
+- [ ] Command palette and keyboard shortcuts
+- [ ] Audio alerts and notification center
+- [ ] Better status bar: GPS fix, satellites, battery, link quality, armed state, flight mode
+- [ ] First-run setup wizard and vehicle/link setup wizard
+- [ ] High-DPI polish, theme customization, and accessibility pass
+
+### Phase 5 — Security and Enterprise Readiness
+
+- [ ] User accounts and roles: viewer, operator, maintainer, admin
+- [ ] Permission system for vehicle commands and plugins
+- [ ] Signed plugins and plugin allowlist
+- [ ] MAVLink signing support
+- [ ] Encrypted secrets/config storage
+- [ ] Secure auto-update channel
+- [ ] License activation, offline licensing, and edition gating
+- [ ] Installer, portable mode, and enterprise deployment profile
+
+### Phase 6 — Architecture and Extensibility
+
+- [ ] Stable plugin SDK and plugin ABI/version compatibility checks
+- [ ] Service registry for plugins
+- [ ] Typed event bus and stronger command/telemetry domain models
+- [ ] Multi-vehicle state model and fleet view
+- [ ] Separate telemetry, mission, map, command, and replay services
+- [ ] Dependency injection for testability
+- [ ] Headless core mode for automation/integration testing
+- [ ] Remote API: WebSocket, REST, or gRPC
+
+### Phase 7 — Differentiators
+
+- [ ] AI-assisted diagnostics and anomaly detection
+- [ ] Mission risk scoring
+- [ ] Battery sag, vibration, GPS drift, and link instability detection
+- [ ] Cloud sync and collaboration mode
+- [ ] Advanced analytics and post-flight reports
 
 ---
 
