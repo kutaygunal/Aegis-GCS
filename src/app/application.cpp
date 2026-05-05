@@ -11,6 +11,7 @@
 #include "utils/logging.hpp"
 #include "utils/diagnostic_exporter.hpp"
 #include "utils/config_validator.hpp"
+#include "utils/config_migrator.hpp"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -50,8 +51,48 @@ Application::~Application() {
 }
 
 bool Application::initialize() {
+    QString configFilePath = QStandardPaths::locate(
+        QStandardPaths::AppConfigLocation, "aegis.json");
+    if (configFilePath.isEmpty()) {
+        configFilePath = "config/aegis.json";
+    }
+
     if (!loadConfiguration()) {
         qWarning() << "[Application] Using default configuration";
+    }
+
+    // ── Migrate config if older than current version ────────────────────
+    QJsonObject configJson = QJsonObject::fromVariantMap(m_config);
+    int configVersion = configJson.value("configVersion").toInt(1);
+    if (configVersion < aegis::utils::ConfigMigrator::CurrentVersion) {
+        QString backupPath;
+        if (aegis::utils::ConfigMigrator::writeBackup(configJson, configFilePath, &backupPath)) {
+            aegis::utils::Logger::instance().log(
+                aegis::utils::LogLevel::Info, "Config",
+                QStringLiteral("Backup written to %1").arg(backupPath));
+        } else {
+            aegis::utils::Logger::instance().log(
+                aegis::utils::LogLevel::Warning, "Config",
+                QStringLiteral("Failed to write config backup before migration"));
+        }
+
+        QString error;
+        aegis::utils::ConfigMigrator migrator = aegis::utils::ConfigMigrator::createAegisMigrator();
+        QJsonObject migrated = migrator.migrate(configJson,
+            aegis::utils::ConfigMigrator::CurrentVersion, &error);
+        if (!error.isEmpty()) {
+            aegis::utils::Logger::instance().log(
+                aegis::utils::LogLevel::Error, "Config",
+                QStringLiteral("Migration failed: %1").arg(error));
+        } else {
+            aegis::utils::Logger::instance().log(
+                aegis::utils::LogLevel::Info, "Config",
+                QStringLiteral("Migrated config from v%1 to v%2")
+                    .arg(configVersion)
+                    .arg(aegis::utils::ConfigMigrator::CurrentVersion));
+            configJson = migrated;
+        }
+        m_config = configJson.toVariantMap();
     }
 
     // Validate config before any service initialization

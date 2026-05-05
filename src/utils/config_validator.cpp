@@ -257,7 +257,7 @@ ConfigValidator ConfigValidator::createAegisValidator() {
     v.addTopLevelRule(SchemaRule{
         QStringLiteral("configVersion"),
         QStringLiteral("int"),
-        false, QVariant(1),
+        false, QVariant(2),
         QVariant(1), QVariant()  // no max
     });
 
@@ -293,6 +293,9 @@ ConfigValidator ConfigValidator::createAegisValidator() {
     telemetryNested.insert(QStringLiteral("heartbeatTimeoutMs"), SchemaRule{
         QStringLiteral("heartbeatTimeoutMs"), QStringLiteral("int"), false,
         QVariant(3000), QVariant(100)});
+    telemetryNested.insert(QStringLiteral("reconnectIntervalMs"), SchemaRule{
+        QStringLiteral("reconnectIntervalMs"), QStringLiteral("int"), false,
+        QVariant(5000), QVariant(100)});
     v.addTopLevelRule(SchemaRule{
         QStringLiteral("telemetry"), QStringLiteral("object"), false,
         QVariant(), QVariant(), QVariant(), QStringList(), telemetryNested});
@@ -316,6 +319,9 @@ ConfigValidator ConfigValidator::createAegisValidator() {
     loggingNested.insert(QStringLiteral("maxSizeBytes"), SchemaRule{
         QStringLiteral("maxSizeBytes"), QStringLiteral("int"), false,
         QVariant(10485760), QVariant(1024)});
+    loggingNested.insert(QStringLiteral("enableConsole"), SchemaRule{
+        QStringLiteral("enableConsole"), QStringLiteral("bool"), false,
+        QVariant(true)});
     v.addTopLevelRule(SchemaRule{
         QStringLiteral("logging"), QStringLiteral("object"), false,
         QVariant(), QVariant(), QVariant(), QStringList(), loggingNested});

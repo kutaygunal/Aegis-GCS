@@ -80,3 +80,10 @@ add_executable(test_config_validator
 target_link_libraries(test_config_validator PRIVATE
     aegis_utils Qt6::Core Qt6::Test GTest::gtest_main)
 add_test(NAME ConfigValidator COMMAND test_config_validator)
+
+add_executable(test_config_migrator
+    utils/test_config_migrator.cpp
+)
+target_link_libraries(test_config_migrator PRIVATE
+    aegis_utils Qt6::Core Qt6::Test GTest::gtest_main)
+add_test(NAME ConfigMigrator COMMAND test_config_migrator)

@@ -7,6 +7,8 @@ add_library(aegis_utils STATIC
     diagnostic_exporter.cpp
     config_validator.hpp
     config_validator.cpp
+    config_migrator.hpp
+    config_migrator.cpp
     ring_buffer.hpp
     thread_pool.hpp
     thread_pool.cpp

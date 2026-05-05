@@ -132,6 +132,8 @@ tasks:
     test_commands:
       - cmake --build build --config Release
       - ctest --test-dir build --output-on-failure
+    status: done
+    notes: Implemented ConfigMigrator with registry, chain runner, and backup writer. v1->v2 and v2->v3 registered. 9/9 tests pass.
     status: planned
 
   - id: P1-006

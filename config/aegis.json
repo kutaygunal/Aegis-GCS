@@ -1,5 +1,5 @@
 {
-    "configVersion": 1,
+    "configVersion": 2,
     "pluginPaths": ["./plugins", "C:/Program Files/Aegis/plugins"],
     "autostartPlugins": [
         "aegis.plugins.telemetry_hud",
@@ -10,13 +10,15 @@
     "telemetry": {
         "bindAddress": "0.0.0.0",
         "bindPort": 14550,
-        "heartbeatTimeoutMs": 3000
+        "heartbeatTimeoutMs": 3000,
+        "reconnectIntervalMs": 5000
     },
     "logging": {
         "minLevel": "Debug",
         "file": "aegis.log",
         "maxFiles": 5,
-        "maxSizeBytes": 10485760
+        "maxSizeBytes": 10485760,
+        "enableConsole": true
     },
     "dummyTelemetry": {
         "enabled": true,
