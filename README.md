@@ -156,6 +156,26 @@ cmake --build build_cesium --config Release --parallel
 .\build_cesium\Release\aegis.exe
 ```
 
+#### One-shot clean + build script
+
+For convenience, run the provided `build.bat` to clean all old artifacts and build a fresh Release in one step:
+
+```powershell
+.\build.bat
+```
+
+The script auto-detects Qt in common install paths (or you can pass it explicitly):
+
+```powershell
+.\build.bat "C:\Qt\6.8.2\msvc2022_64"
+```
+
+What it does:
+1. Removes `build/`, `build_cesium/`, `build_check/`, `aegis.log`, and loose `.exe`/`.pdb`
+2. Configures CMake for Release with tests OFF
+3. Builds the project in parallel
+4. Prints a summary confirming `aegis.exe` was produced
+
 ### Linux
 
 ```bash
