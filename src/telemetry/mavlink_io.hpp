@@ -7,6 +7,7 @@
 #include <QTimer>
 #include <QQueue>
 #include <QMutex>
+#include <QDateTime>
 #include "types/mavlink_types.hpp"
 #include "core/types/common.hpp"
 
@@ -28,6 +29,7 @@ public:
     void start(const QHostAddress& bindAddress = QHostAddress::Any,
                quint16 bindPort = 14550);
     void stop();
+    void setHeartbeatTimeoutMs(int timeoutMs);
 
     bool isConnected() const { return m_running; }
 
@@ -58,6 +60,7 @@ private:
     QTimer* m_heartbeatTimer{nullptr};
     QTimer* m_txTimer{nullptr};
     bool m_running{false};
+    bool m_linkAlive{false};
 
     QMutex m_txMutex;
     QQueue<types::MavlinkMessage> m_txQueue;
@@ -68,6 +71,8 @@ private:
 
     QHostAddress m_bindAddress;
     quint16 m_bindPort{14550};
+    int m_heartbeatTimeoutMs{3000};
+    QDateTime m_lastHeartbeatUtc;
 };
 
 } // namespace aegis::telemetry

@@ -21,3 +21,5 @@ struct MavlinkMessage {
 };
 
 } // namespace aegis::telemetry::types
+
+Q_DECLARE_METATYPE(aegis::telemetry::types::MavlinkMessage)

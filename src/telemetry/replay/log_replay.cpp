@@ -1,7 +1,6 @@
 #include "log_replay.hpp"
 #include "core/bus/telemetry_bus.hpp"
-#include "../parsers.hpp"
-#include <QDataStream>
+#include <mavlink.h>
 #include <QDebug>
 
 namespace aegis::telemetry {
@@ -18,17 +17,25 @@ LogReplay::~LogReplay() {
 }
 
 bool LogReplay::loadFile(const QString& path) {
+    if (m_file.isOpen()) {
+        m_file.close();
+    }
     m_file.setFileName(path);
     if (!m_file.open(QIODevice::ReadOnly)) {
         qWarning() << "[LogReplay] Failed to open" << path;
         return false;
     }
     m_totalBytes = m_file.size();
+    m_file.seek(0);
     return true;
 }
 
 void LogReplay::start(qreal speed) {
-    m_speed = speed;
+    if (!m_file.isOpen()) {
+        qWarning() << "[LogReplay] No replay file loaded";
+        return;
+    }
+    m_speed = qMax<qreal>(0.1, speed);
     m_playing = true;
     m_timer->start();
     emit playbackStarted();
@@ -41,12 +48,19 @@ void LogReplay::pause() {
 }
 
 void LogReplay::step() {
-    // TODO: parse and emit exactly one message
+    if (!m_file.isOpen()) return;
+
+    types::MavlinkMessage msg;
+    if (readNextMessage(msg)) {
+        emit messageReplayed(msg);
+        emit progressChanged(progress());
+    }
 }
 
 void LogReplay::seek(qreal percent) {
     if (!m_file.isOpen()) return;
-    qint64 pos = static_cast<qint64>(m_totalBytes * percent);
+    const qreal clamped = qBound<qreal>(0.0, percent, 1.0);
+    qint64 pos = static_cast<qint64>(m_totalBytes * clamped);
     m_file.seek(pos);
 }
 
@@ -61,8 +75,47 @@ void LogReplay::onTick() {
         emit playbackFinished();
         return;
     }
-    // TODO: parse MAVLink frame, timestamp-interpolate, emit via MavlinkParser
-    emit progressChanged(progress());
+
+    const int messagesPerTick = qMax(1, static_cast<int>(m_speed));
+    bool replayedAny = false;
+    for (int i = 0; i < messagesPerTick; ++i) {
+        types::MavlinkMessage msg;
+        if (!readNextMessage(msg)) {
+            pause();
+            emit playbackFinished();
+            return;
+        }
+        replayedAny = true;
+        emit messageReplayed(msg);
+    }
+
+    if (replayedAny) {
+        emit progressChanged(progress());
+    }
+}
+
+bool LogReplay::readNextMessage(types::MavlinkMessage& out) {
+    if (!m_file.isOpen()) return false;
+
+    mavlink_status_t status{};
+    mavlink_message_t msg{};
+    char byte = 0;
+
+    while (!m_file.atEnd()) {
+        if (m_file.read(&byte, 1) != 1) {
+            break;
+        }
+
+        if (mavlink_parse_char(MAVLINK_COMM_0,
+                               static_cast<uint8_t>(byte),
+                               &msg, &status)) {
+            out.raw = msg;
+            out.timestamp = QDateTime::currentDateTimeUtc();
+            return true;
+        }
+    }
+
+    return false;
 }
 
 } // namespace aegis::telemetry

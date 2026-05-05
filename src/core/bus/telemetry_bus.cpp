@@ -4,7 +4,7 @@
 namespace aegis::core {
 
 TelemetryBus::TelemetryBus(QObject* parent) : QObject(parent) {
-    qRegisterMetaType<types::AttitudeData>(">aegis::core::types::AttitudeData");
+    qRegisterMetaType<types::AttitudeData>("aegis::core::types::AttitudeData");
     qRegisterMetaType<types::PositionData>("aegis::core::types::PositionData");
     qRegisterMetaType<types::BatteryData>("aegis::core::types::BatteryData");
     qRegisterMetaType<types::SystemState>("aegis::core::types::SystemState");

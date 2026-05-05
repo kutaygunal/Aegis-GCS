@@ -4,10 +4,12 @@
 #include <mavlink.h>
 #include <QDebug>
 #include <QNetworkDatagram>
+#include <QMetaObject>
 
 namespace aegis::telemetry {
 
 MavlinkIO::MavlinkIO(QObject* parent) : QObject(parent) {
+    qRegisterMetaType<types::MavlinkMessage>("aegis::telemetry::types::MavlinkMessage");
     moveToThread(&m_workerThread);
     connect(&m_workerThread, &QThread::started, this, &MavlinkIO::setupSocket);
 }
@@ -18,14 +20,55 @@ MavlinkIO::~MavlinkIO() {
 }
 
 void MavlinkIO::start(const QHostAddress& bindAddress, quint16 bindPort) {
+    if (m_running) {
+        qWarning() << "[MavlinkIO] Already running";
+        return;
+    }
+
     m_bindAddress = bindAddress;
     m_bindPort = bindPort;
+    m_remoteKnown = false;
+    m_linkAlive = false;
+    m_lastHeartbeatUtc = QDateTime();
     m_workerThread.start(QThread::TimeCriticalPriority);
 }
 
 void MavlinkIO::stop() {
-    m_running = false;
+    if (!m_running && !m_workerThread.isRunning()) {
+        return;
+    }
+
+    if (m_workerThread.isRunning()) {
+        QMetaObject::invokeMethod(this, [this]() {
+            if (m_heartbeatTimer) m_heartbeatTimer->stop();
+            if (m_txTimer) m_txTimer->stop();
+            if (m_socket) {
+                m_socket->close();
+                m_socket->deleteLater();
+                m_socket = nullptr;
+            }
+            if (m_linkAlive) {
+                m_linkAlive = false;
+                emit connectionStateChanged(false);
+            }
+            m_remoteKnown = false;
+            m_running = false;
+        }, Qt::BlockingQueuedConnection);
+    } else {
+        m_running = false;
+        m_linkAlive = false;
+        m_remoteKnown = false;
+    }
+
     m_workerThread.quit();
+    m_workerThread.wait(2000);
+}
+
+void MavlinkIO::setHeartbeatTimeoutMs(int timeoutMs) {
+    m_heartbeatTimeoutMs = qMax(1, timeoutMs);
+    if (m_heartbeatTimer) {
+        m_heartbeatTimer->setInterval(m_heartbeatTimeoutMs);
+    }
 }
 
 void MavlinkIO::sendMessage(const types::MavlinkMessage& msg) {
@@ -35,9 +78,11 @@ void MavlinkIO::sendMessage(const types::MavlinkMessage& msg) {
 
 void MavlinkIO::sendCommand(const aegis::core::types::VehicleCommand& cmd) {
     mavlink_message_t msg{};
+    constexpr uint8_t kSourceSystemId = 255;
+    constexpr uint8_t kSourceComponentId = MAV_COMP_ID_MISSIONPLANNER;
     mavlink_msg_command_long_pack(
-        cmd.targetSystem,
-        cmd.targetComponent,
+        kSourceSystemId,
+        kSourceComponentId,
         &msg,
         cmd.targetSystem,
         cmd.targetComponent,
@@ -65,6 +110,7 @@ void MavlinkIO::setRemoteAddress(const QHostAddress& addr, quint16 port) {
 void MavlinkIO::setupSocket() {
     m_socket = new QUdpSocket(this);
     if (!m_socket->bind(m_bindAddress, m_bindPort)) {
+        m_running = false;
         emit parseError(m_socket->errorString());
         m_workerThread.quit();
         return;
@@ -73,7 +119,7 @@ void MavlinkIO::setupSocket() {
     connect(m_socket, &QUdpSocket::readyRead, this, &MavlinkIO::onReadyRead);
 
     m_heartbeatTimer = new QTimer(this);
-    m_heartbeatTimer->setInterval(3000);
+    m_heartbeatTimer->setInterval(m_heartbeatTimeoutMs);
     connect(m_heartbeatTimer, &QTimer::timeout, this, &MavlinkIO::onHeartbeatTimeout);
     m_heartbeatTimer->start();
 
@@ -83,7 +129,7 @@ void MavlinkIO::setupSocket() {
     m_txTimer->start();
 
     m_running = true;
-    emit connectionStateChanged(true);
+    m_linkAlive = false;
     qDebug() << "[MavlinkIO] Listening on" << m_bindAddress.toString() << ":"
              << m_bindPort;
 }
@@ -105,6 +151,14 @@ void MavlinkIO::onReadyRead() {
             if (mavlink_parse_char(MAVLINK_COMM_0,
                                    static_cast<uint8_t>(c),
                                    &msg, &status)) {
+                if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
+                    m_lastHeartbeatUtc = QDateTime::currentDateTimeUtc();
+                    if (!m_linkAlive) {
+                        m_linkAlive = true;
+                        emit connectionStateChanged(true);
+                    }
+                }
+
                 types::MavlinkMessage out;
                 out.raw = msg;
                 out.timestamp = QDateTime::currentDateTimeUtc();
@@ -115,7 +169,15 @@ void MavlinkIO::onReadyRead() {
 }
 
 void MavlinkIO::onHeartbeatTimeout() {
-    // TODO: implement actual timeout tracking per-system
+    if (!m_linkAlive || !m_lastHeartbeatUtc.isValid()) {
+        return;
+    }
+
+    if (m_lastHeartbeatUtc.msecsTo(QDateTime::currentDateTimeUtc()) >= m_heartbeatTimeoutMs) {
+        m_linkAlive = false;
+        emit connectionStateChanged(false);
+        qWarning() << "[MavlinkIO] Heartbeat timeout after" << m_heartbeatTimeoutMs << "ms";
+    }
 }
 
 void MavlinkIO::processOutboundQueue() {

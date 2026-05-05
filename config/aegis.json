@@ -14,5 +14,21 @@
     "logging": {
         "minLevel": "Debug",
         "file": "aegis.log"
+    },
+    "dummyTelemetry": {
+        "enabled": true,
+        "intervalMs": 100
+    },
+    "plugins": {
+        "aegis.plugins.telemetry_hud": {},
+        "aegis.plugins.alert_console": {
+            "maxItems": 250,
+            "showTimestamps": true
+        },
+        "aegis.plugins.mission_editor": {},
+        "aegis.plugins.map_view": {
+            "zoom": 15,
+            "tileUrlTemplate": "https://tile.openstreetmap.org/%1/%2/%3.png"
+        }
     }
 }

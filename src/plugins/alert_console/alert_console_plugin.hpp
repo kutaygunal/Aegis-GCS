@@ -37,6 +37,8 @@ private:
     void buildUi();
     QListWidget* m_list{nullptr};
     QWidget* m_widget{nullptr};
+    int m_maxItems{200};
+    bool m_showTimestamps{true};
 };
 
 } // namespace aegis::plugins

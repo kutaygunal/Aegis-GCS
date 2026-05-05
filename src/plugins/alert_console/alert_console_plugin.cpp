@@ -15,7 +15,9 @@ AlertConsolePlugin::~AlertConsolePlugin() = default;
 bool AlertConsolePlugin::initialize(core::TelemetryBus* bus,
                                      core::VehicleState* state,
                                      const QVariantMap& config) {
-    Q_UNUSED(state) Q_UNUSED(config)
+    Q_UNUSED(state)
+    m_maxItems = qMax(1, config.value("maxItems", 200).toInt());
+    m_showTimestamps = config.value("showTimestamps", true).toBool();
     buildUi();
     connect(bus, &core::TelemetryBus::alertRaised,
             this, &AlertConsolePlugin::onAlert,
@@ -52,12 +54,18 @@ void AlertConsolePlugin::onAlert(core::types::AlertLevel level,
         default: break;
     }
 
-    QString timestamp = QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss.zzz"));
-    QString text = QStringLiteral("[%1] %2").arg(timestamp, message);
+    QString text = message;
+    if (m_showTimestamps) {
+        const QString timestamp = QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss.zzz"));
+        text = QStringLiteral("[%1] %2").arg(timestamp, message);
+    }
 
     auto* item = new QListWidgetItem(text);
     item->setForeground(QColor(color));
     m_list->addItem(item);
+    while (m_list->count() > m_maxItems) {
+        delete m_list->takeItem(0);
+    }
     m_list->scrollToBottom();
 }
 

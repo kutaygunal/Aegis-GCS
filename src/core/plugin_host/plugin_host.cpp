@@ -83,7 +83,8 @@ IPlugin* PluginHost::load(const QString& pluginId) {
     }
 
     try {
-        bool ok = plugin->initialize(m_bus, m_state, m_config);
+        const QVariantMap pluginConfig = m_config.value(pluginId).toMap();
+        bool ok = plugin->initialize(m_bus, m_state, pluginConfig);
         if (!ok) {
             emit pluginCrashed(pluginId, "initialize() returned false");
             loader->unload();

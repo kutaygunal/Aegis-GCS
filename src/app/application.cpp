@@ -15,9 +15,132 @@
 #include <QFile>
 #include <QDir>
 #include <QStandardPaths>
+#include <QHostAddress>
 #include <QDebug>
 #include <QTimer>
 #include <QtMath>
+
+namespace {
+
+aegis::utils::LogLevel parseLogLevel(const QString& value) {
+    const QString normalized = value.trimmed().toLower();
+    if (normalized == "debug") return aegis::utils::LogLevel::Debug;
+    if (normalized == "info") return aegis::utils::LogLevel::Info;
+    if (normalized == "warning" || normalized == "warn") return aegis::utils::LogLevel::Warning;
+    if (normalized == "error") return aegis::utils::LogLevel::Error;
+    if (normalized == "critical") return aegis::utils::LogLevel::Critical;
+    return aegis::utils::LogLevel::Debug;
+}
+
+QStringList defaultAutostartPlugins() {
+    return {
+        QStringLiteral("aegis.plugins.telemetry_hud"),
+        QStringLiteral("aegis.plugins.alert_console"),
+        QStringLiteral("aegis.plugins.mission_editor"),
+        QStringLiteral("aegis.plugins.map_view")
+    };
+}
+
+QVariantMap defaultPluginConfig() {
+    return {
+        {QStringLiteral("aegis.plugins.telemetry_hud"), QVariantMap{}},
+        {QStringLiteral("aegis.plugins.alert_console"), QVariantMap{
+            {QStringLiteral("maxItems"), 200},
+            {QStringLiteral("showTimestamps"), true}
+        }},
+        {QStringLiteral("aegis.plugins.mission_editor"), QVariantMap{}},
+        {QStringLiteral("aegis.plugins.map_view"), QVariantMap{
+            {QStringLiteral("zoom"), 15},
+            {QStringLiteral("tileUrlTemplate"), QStringLiteral("https://tile.openstreetmap.org/%1/%2/%3.png")}
+        }}
+    };
+}
+
+QVariantMap mergeVariantMaps(const QVariantMap& defaults, const QVariantMap& overrides) {
+    QVariantMap result = defaults;
+    for (auto it = overrides.constBegin(); it != overrides.constEnd(); ++it) {
+        if (result.value(it.key()).metaType().id() == QMetaType::QVariantMap &&
+            it.value().metaType().id() == QMetaType::QVariantMap) {
+            result.insert(it.key(), mergeVariantMaps(result.value(it.key()).toMap(), it.value().toMap()));
+        } else {
+            result.insert(it.key(), it.value());
+        }
+    }
+    return result;
+}
+
+QVariantMap defaultConfig() {
+    return {
+        {QStringLiteral("pluginPaths"), QStringList{
+            QStringLiteral("./plugins"),
+            QStringLiteral("C:/Program Files/Aegis/plugins")
+        }},
+        {QStringLiteral("autostartPlugins"), defaultAutostartPlugins()},
+        {QStringLiteral("telemetry"), QVariantMap{
+            {QStringLiteral("bindAddress"), QStringLiteral("0.0.0.0")},
+            {QStringLiteral("bindPort"), 14550},
+            {QStringLiteral("heartbeatTimeoutMs"), 3000}
+        }},
+        {QStringLiteral("logging"), QVariantMap{
+            {QStringLiteral("minLevel"), QStringLiteral("Debug")},
+            {QStringLiteral("file"), QStringLiteral("aegis.log")}
+        }},
+        {QStringLiteral("dummyTelemetry"), QVariantMap{
+            {QStringLiteral("enabled"), true},
+            {QStringLiteral("intervalMs"), 100}
+        }},
+        {QStringLiteral("plugins"), defaultPluginConfig()}
+    };
+}
+
+QVariantMap validateAndNormalizeConfig(const QVariantMap& rawConfig) {
+    QVariantMap config = mergeVariantMaps(defaultConfig(), rawConfig);
+
+    QVariantMap telemetry = config.value("telemetry").toMap();
+    const QString bindAddress = telemetry.value("bindAddress").toString().trimmed();
+    if (QHostAddress(bindAddress).isNull()) {
+        qWarning() << "[Application] Invalid telemetry.bindAddress, using default";
+        telemetry.insert("bindAddress", QStringLiteral("0.0.0.0"));
+    }
+
+    const int bindPort = telemetry.value("bindPort").toInt();
+    telemetry.insert("bindPort", (bindPort > 0 && bindPort <= 65535) ? bindPort : 14550);
+
+    const int heartbeatTimeoutMs = telemetry.value("heartbeatTimeoutMs").toInt();
+    telemetry.insert("heartbeatTimeoutMs", heartbeatTimeoutMs > 0 ? heartbeatTimeoutMs : 3000);
+    config.insert("telemetry", telemetry);
+
+    QVariantMap logging = config.value("logging").toMap();
+    logging.insert("minLevel", [&]() -> QString {
+        const QString level = logging.value("minLevel").toString();
+        const QString normalized = level.trimmed().toLower();
+        if (normalized == "debug" || normalized == "info" || normalized == "warning" ||
+            normalized == "warn" || normalized == "error" || normalized == "critical") {
+            return level;
+        }
+        qWarning() << "[Application] Invalid logging.minLevel, using default";
+        return QStringLiteral("Debug");
+    }());
+    config.insert("logging", logging);
+
+    QVariantMap dummyTelemetry = config.value("dummyTelemetry").toMap();
+    const int intervalMs = dummyTelemetry.value("intervalMs").toInt();
+    dummyTelemetry.insert("intervalMs", intervalMs > 0 ? intervalMs : 100);
+    config.insert("dummyTelemetry", dummyTelemetry);
+
+    QVariantMap plugins = defaultPluginConfig();
+    plugins = mergeVariantMaps(plugins, config.value("plugins").toMap());
+
+    QVariantMap alertConsole = plugins.value("aegis.plugins.alert_console").toMap();
+    const int maxItems = alertConsole.value("maxItems", 200).toInt();
+    alertConsole.insert("maxItems", maxItems > 0 ? maxItems : 200);
+    plugins.insert("aegis.plugins.alert_console", alertConsole);
+
+    config.insert("plugins", plugins);
+    return config;
+}
+
+}
 
 namespace aegis::app {
 
@@ -35,13 +158,8 @@ Application::~Application() {
 bool Application::initialize() {
     if (!loadConfiguration()) {
         qWarning() << "[Application] Using default configuration";
-        // Set fallback autostart plugins if no config file
-        m_config.insert("autostartPlugins", QStringList()
-            << "aegis.plugins.telemetry_hud"
-            << "aegis.plugins.alert_console"
-            << "aegis.plugins.mission_editor"
-            << "aegis.plugins.map_view");
     }
+    m_config = validateAndNormalizeConfig(m_config);
 
     // ── Core services ─────────────────────────────────────────────────
     m_bus.reset(new aegis::core::TelemetryBus(this));
@@ -62,6 +180,21 @@ bool Application::initialize() {
             Qt::QueuedConnection);
 
     m_logReplay.reset(new aegis::telemetry::LogReplay(m_bus.data(), this));
+    connect(m_logReplay.data(), &aegis::telemetry::LogReplay::messageReplayed,
+            m_mavlinkParser.data(), &aegis::telemetry::MavlinkParser::processMessage,
+            Qt::QueuedConnection);
+
+    const QVariantMap telemetryConfig = m_config.value("telemetry").toMap();
+    m_mavlinkIO->setHeartbeatTimeoutMs(
+        telemetryConfig.value("heartbeatTimeoutMs", 3000).toInt());
+
+    const QVariantMap loggingConfig = m_config.value("logging").toMap();
+    const QString logFile = loggingConfig.value("file").toString();
+    if (!logFile.isEmpty()) {
+        aegis::utils::Logger::instance().setLogFile(logFile);
+    }
+    aegis::utils::Logger::instance().setMinLevel(
+        parseLogLevel(loggingConfig.value("minLevel", "Debug").toString()));
 
     // ── UI layer ──────────────────────────────────────────────────────
     m_mainWindow.reset(new aegis::ui::MainWindow());
@@ -90,17 +223,19 @@ bool Application::initialize() {
         }
     }
 
-    // ── Dummy telemetry generator (for demo when no vehicle is connected) ─
-    QTimer* dummyTimer = new QTimer(this);
-    connect(dummyTimer, &QTimer::timeout, this, &Application::emitDummyTelemetry);
-    dummyTimer->start(100);  // 10 Hz
-    m_dummyTimer.reset(dummyTimer);
+    const QVariantMap dummyTelemetryConfig = m_config.value("dummyTelemetry").toMap();
+    const bool dummyTelemetryEnabled = dummyTelemetryConfig.value("enabled", false).toBool();
+    if (dummyTelemetryEnabled) {
+        QTimer* dummyTimer = new QTimer(this);
+        connect(dummyTimer, &QTimer::timeout, this, &Application::emitDummyTelemetry);
+        dummyTimer->start(dummyTelemetryConfig.value("intervalMs", 100).toInt());
+        m_dummyTimer.reset(dummyTimer);
 
-    // Tell the UI that the dummy telemetry stream is active so the map/status
-    // bar look alive even before a real MAVLink UDP link is opened.
-    m_bus->emitConnectionStateChanged(aegis::core::types::ConnectionState::Connected);
+        // Tell the UI that the dummy telemetry stream is active so the map/status
+        // bar look alive even before a real MAVLink UDP link is opened.
+        m_bus->emitConnectionStateChanged(aegis::core::types::ConnectionState::Connected);
+    }
 
-    aegis::utils::Logger::instance().setMinLevel(aegis::utils::LogLevel::Debug);
     aegis::utils::Logger::instance().log(
         aegis::utils::LogLevel::Info, "App", "AEGIS GCS initialized");
 
@@ -168,9 +303,20 @@ void Application::setupConnections() {
 }
 
 void Application::onConnectionRequested(const QString& host, quint16 port) {
-    Q_UNUSED(host)
-    m_mavlinkIO->start();
-    Q_UNUSED(port)
+    const QVariantMap telemetryConfig = m_config.value("telemetry").toMap();
+    const QString bindHost = host.isEmpty()
+        ? telemetryConfig.value("bindAddress", QStringLiteral("0.0.0.0")).toString()
+        : host;
+    const quint16 bindPort = port == 0
+        ? static_cast<quint16>(telemetryConfig.value("bindPort", 14550).toUInt())
+        : port;
+
+    if (m_dummyTimer) {
+        m_dummyTimer->stop();
+        m_dummyTimer.reset();
+    }
+
+    m_mavlinkIO->start(QHostAddress(bindHost), bindPort);
 }
 
 void Application::onReplayRequested(const QString& filePath) {

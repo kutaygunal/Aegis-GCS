@@ -31,3 +31,24 @@ add_executable(test_ring_buffer
 )
 target_link_libraries(test_ring_buffer PRIVATE Qt6::Core GTest::gtest_main)
 add_test(NAME RingBuffer COMMAND test_ring_buffer)
+
+add_executable(test_parsers
+    telemetry/test_parsers.cpp
+)
+target_link_libraries(test_parsers PRIVATE
+    aegis_core aegis_telemetry Qt6::Core Qt6::Test GTest::gtest_main)
+add_test(NAME Parsers COMMAND test_parsers)
+
+add_executable(test_log_replay
+    telemetry/test_log_replay.cpp
+)
+target_link_libraries(test_log_replay PRIVATE
+    aegis_core aegis_telemetry Qt6::Core Qt6::Test GTest::gtest_main)
+add_test(NAME LogReplay COMMAND test_log_replay)
+
+add_executable(test_mavlink_io
+    telemetry/test_mavlink_io.cpp
+)
+target_link_libraries(test_mavlink_io PRIVATE
+    aegis_core aegis_telemetry Qt6::Core Qt6::Network Qt6::Test GTest::gtest_main)
+add_test(NAME MavlinkIO COMMAND test_mavlink_io)

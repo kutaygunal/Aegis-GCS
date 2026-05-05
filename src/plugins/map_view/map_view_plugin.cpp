@@ -9,6 +9,9 @@
 #include <QPen>
 #include <QBrush>
 #include <QGraphicsPolygonItem>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QPixmap>
 #include <QPolygonF>
 #include <QDebug>
 #include <QtMath>
@@ -23,7 +26,10 @@ MapViewPlugin::~MapViewPlugin() = default;
 bool MapViewPlugin::initialize(core::TelemetryBus* bus,
                                 core::VehicleState* state,
                                 const QVariantMap& config) {
-    Q_UNUSED(config)
+    m_zoom = qBound(1, config.value("zoom", 15).toInt(), 19);
+    m_tileUrlTemplate = config.value(
+        "tileUrlTemplate",
+        QStringLiteral("https://tile.openstreetmap.org/%1/%2/%3.png")).toString();
     m_state = state;
     buildUi();
     setupScene();
@@ -95,46 +101,33 @@ void MapViewPlugin::buildUi() {
 }
 
 void MapViewPlugin::setupScene() {
-    // Coordinate grid: 10 major divisions, 100 minor
-    qreal gridSize = 20000.0;
-
-    // Background
-    m_scene->addRect(-gridSize/2, -gridSize/2, gridSize, gridSize,
-                     QPen(QColor(aegis::ui::ThemeEngine::COLOR_SURFACE)),
-                     QBrush(QColor(aegis::ui::ThemeEngine::COLOR_BACKGROUND)));
-
-    // Grid lines
-    QPen minorPen(QColor("#333333"), 0.5);
-    QPen majorPen(QColor("#555555"), 1.0);
-
-    for (int i = -50; i <= 50; ++i) {
-        qreal pos = i * (gridSize / 100.0);
-        bool major = (i % 10 == 0);
-        m_scene->addLine(pos, -gridSize/2, pos, gridSize/2, major ? majorPen : minorPen);
-        m_scene->addLine(-gridSize/2, pos, gridSize/2, pos, major ? majorPen : minorPen);
+    if (!m_network) {
+        m_network = new QNetworkAccessManager(this);
     }
 
-    // Crosshair at center (current map center)
+    const qreal sceneExtent = TILE_SIZE * (TILE_RADIUS * 2 + 3);
+    m_scene->setSceneRect(-sceneExtent / 2, -sceneExtent / 2, sceneExtent, sceneExtent);
+    m_scene->setBackgroundBrush(QBrush(QColor(aegis::ui::ThemeEngine::COLOR_BACKGROUND)));
+
+    // Crosshair at center map reference.
     QPen crossPen(QColor(aegis::ui::ThemeEngine::COLOR_INFO), 1.5);
     crossPen.setStyle(Qt::DashLine);
-    m_scene->addLine(-100, 0, 100, 0, crossPen);
-    m_scene->addLine(0, -100, 0, 100, crossPen);
+    auto* h = m_scene->addLine(-100, 0, 100, 0, crossPen);
+    auto* v = m_scene->addLine(0, -100, 0, 100, crossPen);
+    h->setZValue(2);
+    v->setZValue(2);
 
-    // Vehicle marker (triangle pointing north by default)
-    QPolygonF triangle;
-    triangle << QPointF(0, -12) << QPointF(-8, 10) << QPointF(0, 6) << QPointF(8, 10);
     m_vehicleMarker = m_scene->addEllipse(-6, -6, 12, 12,
                                          QPen(QColor(aegis::ui::ThemeEngine::COLOR_GOOD), 2),
                                          QBrush(QColor(aegis::ui::ThemeEngine::COLOR_GOOD)));
-    m_vehicleMarker->setZValue(10);
+    m_vehicleMarker->setZValue(20);
 
-    // Track line
     m_trackLine = m_scene->addPath(QPainterPath(),
                                      QPen(QColor(aegis::ui::ThemeEngine::COLOR_INFO), 2));
-    m_trackLine->setZValue(5);
+    m_trackLine->setZValue(10);
 
+    updateTiles();
     m_view->centerOn(0, 0);
-    m_view->setSceneRect(-gridSize/2, -gridSize/2, gridSize, gridSize);
 }
 
 void MapViewPlugin::onPositionChanged(const core::types::PositionData& data) {
@@ -142,10 +135,16 @@ void MapViewPlugin::onPositionChanged(const core::types::PositionData& data) {
     qreal lon = data.lon / 1e7;
     qreal hdg = data.hdg / 100.0;
 
-    // Update center on first fix
-    if (m_trackHistory.isEmpty()) {
+    m_lastLat = lat;
+    m_lastLon = lon;
+    m_lastHeading = hdg;
+
+    // Update center on first fix.
+    if (!m_hasFix) {
         m_centerLat = lat;
         m_centerLon = lon;
+        m_hasFix = true;
+        updateTiles();
     }
 
     m_trackHistory.append(latLonToScene(lat, lon));
@@ -198,9 +197,64 @@ void MapViewPlugin::updateVehicleMarker(qreal lat, qreal lon, qreal hdg) {
 }
 
 QPointF MapViewPlugin::latLonToScene(qreal lat, qreal lon) const {
-    qreal x = (lon - m_centerLon) * SCALE_FACTOR * qCos(qDegreesToRadians(m_centerLat));
-    qreal y = -(lat - m_centerLat) * SCALE_FACTOR;  // negated: north is up
+    return latLonToWorldPixel(lat, lon) - latLonToWorldPixel(m_centerLat, m_centerLon);
+}
+
+QPointF MapViewPlugin::latLonToWorldPixel(qreal lat, qreal lon) const {
+    const qreal clampedLat = qBound(-85.05112878, lat, 85.05112878);
+    const qreal sinLat = qSin(qDegreesToRadians(clampedLat));
+    const qreal mapSize = static_cast<qreal>(TILE_SIZE) * (1 << m_zoom);
+
+    constexpr qreal PI = 3.14159265358979323846;
+    const qreal x = (lon + 180.0) / 360.0 * mapSize;
+    const qreal y = (0.5 - qLn((1.0 + sinLat) / (1.0 - sinLat)) / (4.0 * PI)) * mapSize;
     return QPointF(x, y);
+}
+
+QPointF MapViewPlugin::tileToScene(int x, int y) const {
+    const QPointF center = latLonToWorldPixel(m_centerLat, m_centerLon);
+    return QPointF(x * TILE_SIZE - center.x(), y * TILE_SIZE - center.y());
+}
+
+void MapViewPlugin::updateTiles() {
+    if (!m_scene || !m_network) return;
+
+    const QPointF center = latLonToWorldPixel(m_centerLat, m_centerLon);
+    const int centerTileX = qFloor(center.x() / TILE_SIZE);
+    const int centerTileY = qFloor(center.y() / TILE_SIZE);
+    const int maxTile = (1 << m_zoom) - 1;
+
+    for (int dx = -TILE_RADIUS; dx <= TILE_RADIUS; ++dx) {
+        for (int dy = -TILE_RADIUS; dy <= TILE_RADIUS; ++dy) {
+            const int tileX = centerTileX + dx;
+            const int tileY = centerTileY + dy;
+            if (tileX < 0 || tileX > maxTile || tileY < 0 || tileY > maxTile) continue;
+            requestTile(tileX, tileY);
+        }
+    }
+}
+
+void MapViewPlugin::requestTile(int x, int y) {
+    const QString key = QStringLiteral("%1/%2/%3").arg(m_zoom).arg(x).arg(y);
+    if (m_tileItems.contains(key)) {
+        m_tileItems.value(key)->setPos(tileToScene(x, y));
+        return;
+    }
+
+    QPixmap empty(TILE_SIZE, TILE_SIZE);
+    empty.fill(QColor(aegis::ui::ThemeEngine::COLOR_SURFACE));
+    auto* placeholder = m_scene->addPixmap(empty);
+    placeholder->setPos(tileToScene(x, y));
+    placeholder->setZValue(0);
+    m_tileItems.insert(key, placeholder);
+
+    const QUrl url(m_tileUrlTemplate.arg(m_zoom).arg(x).arg(y));
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::UserAgentHeader,
+                      QStringLiteral("AEGIS-GCS/0.1 (+https://github.com/aegis-gcs)"));
+    auto* reply = m_network->get(request);
+    reply->setProperty("tileKey", key);
+    connect(reply, &QNetworkReply::finished, this, &MapViewPlugin::onTileDownloaded);
 }
 
 void MapViewPlugin::fitViewToVehicle() {
@@ -209,13 +263,41 @@ void MapViewPlugin::fitViewToVehicle() {
 }
 
 void MapViewPlugin::zoomIn() {
-    m_scale *= 1.25;
-    m_view->scale(1.25, 1.25);
+    if (m_zoom >= 19) return;
+    ++m_zoom;
+    m_tileItems.clear();
+    m_headingLine = nullptr;
+    m_scene->clear();
+    setupScene();
+    if (m_hasFix) updateVehicleMarker(m_lastLat, m_lastLon, m_lastHeading);
 }
 
 void MapViewPlugin::zoomOut() {
-    m_scale /= 1.25;
-    m_view->scale(0.8, 0.8);
+    if (m_zoom <= 1) return;
+    --m_zoom;
+    m_tileItems.clear();
+    m_headingLine = nullptr;
+    m_scene->clear();
+    setupScene();
+    if (m_hasFix) updateVehicleMarker(m_lastLat, m_lastLon, m_lastHeading);
+}
+
+void MapViewPlugin::onTileDownloaded() {
+    auto* reply = qobject_cast<QNetworkReply*>(sender());
+    if (!reply) return;
+
+    const QString key = reply->property("tileKey").toString();
+    if (reply->error() == QNetworkReply::NoError && m_tileItems.contains(key)) {
+        QPixmap pixmap;
+        pixmap.loadFromData(reply->readAll());
+        if (!pixmap.isNull()) {
+            m_tileItems.value(key)->setPixmap(pixmap);
+        }
+    } else if (reply->error() != QNetworkReply::NoError) {
+        qWarning() << "[MapView] Tile download failed:" << reply->url() << reply->errorString();
+    }
+
+    reply->deleteLater();
 }
 
 } // namespace aegis::plugins

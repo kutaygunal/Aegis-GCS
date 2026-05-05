@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QTimer>
 #include <QDateTime>
+#include "../types/mavlink_types.hpp"
 
 namespace aegis::core { class TelemetryBus; }
 
@@ -35,6 +36,7 @@ signals:
     void playbackPaused();
     void playbackFinished();
     void progressChanged(qreal percent);
+    void messageReplayed(const aegis::telemetry::types::MavlinkMessage& msg);
 
 private slots:
     void onTick();
@@ -46,6 +48,8 @@ private:
     bool m_playing{false};
     qreal m_speed{1.0};
     qint64 m_totalBytes{0};
+
+    bool readNextMessage(aegis::telemetry::types::MavlinkMessage& out);
 };
 
 } // namespace aegis::telemetry

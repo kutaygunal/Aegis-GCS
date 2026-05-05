@@ -22,7 +22,7 @@ if(NOT Qt6_FOUND)
     message(FATAL_ERROR "Qt6 Core/Widgets/Network/Qml not found. Set CMAKE_PREFIX_PATH to your Qt6 installation.")
 endif()
 if(NOT TARGET Qt6::WebEngineWidgets)
-    message(WARNING "Qt6::WebEngineWidgets not found. Map plugin disabled.")
+    message(WARNING "Qt6::WebEngineWidgets not found. Native Qt map plugin will be used.")
 endif()
 
 # ── Compiler flags ───────────────────────────────────────────────────

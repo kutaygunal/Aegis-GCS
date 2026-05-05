@@ -47,17 +47,31 @@ TEST_F(TelemetryBusTest, TopicPubSub) {
     EXPECT_TRUE(received);
 }
 
-TEST_F(TelemetryBusTest, CommandResponseRoundTrip) {
+TEST_F(TelemetryBusTest, OutboundCommandPosted) {
     bool received = false;
     QObject sink;
-    connect(bus, &TelemetryBus::commandResponse, &sink,
-            [&received](quint16, bool success, const QString&) {
-                received = success;
+    connect(bus, &TelemetryBus::outboundCommand, &sink,
+            [&received](const types::VehicleCommand& cmd) {
+                received = (cmd.commandId == 16);
             });
 
     types::VehicleCommand cmd;
     cmd.commandId = 16;
     bus->postCommand(cmd);
+    QCoreApplication::processEvents();
+
+    EXPECT_TRUE(received);
+}
+
+TEST_F(TelemetryBusTest, CommandResponseSignalDelivery) {
+    bool received = false;
+    QObject sink;
+    connect(bus, &TelemetryBus::commandResponse, &sink,
+            [&received](quint16 commandId, bool success, const QString&) {
+                received = success && commandId == 16;
+            });
+
+    bus->emitCommandResponse(16, true, QStringLiteral("ok"));
     QCoreApplication::processEvents();
 
     EXPECT_TRUE(received);

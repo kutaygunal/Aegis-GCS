@@ -10,6 +10,38 @@
 
 #include <QLabel>
 
+namespace {
+
+QString decodeVehicleMode(const aegis::core::types::SystemState& state) {
+    constexpr quint8 MAV_MODE_FLAG_MANUAL_INPUT_ENABLED = 64;
+    constexpr quint8 MAV_MODE_FLAG_STABILIZE_ENABLED = 16;
+    constexpr quint8 MAV_MODE_FLAG_GUIDED_ENABLED = 8;
+    constexpr quint8 MAV_MODE_FLAG_AUTO_ENABLED = 4;
+    constexpr quint8 MAV_MODE_FLAG_TEST_ENABLED = 2;
+
+    if (state.customMode != 0) {
+        return QStringLiteral("CUSTOM:%1").arg(state.customMode);
+    }
+    if (state.baseMode & MAV_MODE_FLAG_AUTO_ENABLED) {
+        return QStringLiteral("AUTO");
+    }
+    if (state.baseMode & MAV_MODE_FLAG_GUIDED_ENABLED) {
+        return QStringLiteral("GUIDED");
+    }
+    if (state.baseMode & MAV_MODE_FLAG_STABILIZE_ENABLED) {
+        return QStringLiteral("STABILIZE");
+    }
+    if (state.baseMode & MAV_MODE_FLAG_MANUAL_INPUT_ENABLED) {
+        return QStringLiteral("MANUAL");
+    }
+    if (state.baseMode & MAV_MODE_FLAG_TEST_ENABLED) {
+        return QStringLiteral("TEST");
+    }
+    return QStringLiteral("UNKNOWN");
+}
+
+}
+
 namespace aegis::ui {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
@@ -108,7 +140,7 @@ void MainWindow::updateConnectionState(aegis::core::types::ConnectionState state
 void MainWindow::updateSystemState(const aegis::core::types::SystemState& state) {
     if (m_vehicleStatusBar) {
         m_vehicleStatusBar->setArmed(state.armed);
-        m_vehicleStatusBar->setMode("MANUAL");
+        m_vehicleStatusBar->setMode(decodeVehicleMode(state));
     }
 }
 

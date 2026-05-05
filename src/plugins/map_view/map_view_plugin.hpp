@@ -7,7 +7,10 @@
 #include <QGraphicsEllipseItem>
 #include <QGraphicsPathItem>
 #include <QGraphicsLineItem>
+#include <QGraphicsPixmapItem>
 #include <QLabel>
+#include <QHash>
+#include <QNetworkAccessManager>
 
 namespace aegis::plugins {
 
@@ -42,12 +45,17 @@ private slots:
     void onMissionCurrentChanged(int index);
     void zoomIn();
     void zoomOut();
+    void onTileDownloaded();
 
 private:
     void buildUi();
     void setupScene();
     void updateVehicleMarker(qreal lat, qreal lon, qreal hdg);
     QPointF latLonToScene(qreal lat, qreal lon) const;
+    QPointF latLonToWorldPixel(qreal lat, qreal lon) const;
+    QPointF tileToScene(int x, int y) const;
+    void updateTiles();
+    void requestTile(int x, int y);
     void fitViewToVehicle();
 
     core::VehicleState* m_state{nullptr};
@@ -62,12 +70,20 @@ private:
     QLabel* m_coordLabel{nullptr};
     QGraphicsLineItem* m_headingLine{nullptr};
     QVector<QPointF> m_trackHistory;
+    QHash<QString, QGraphicsPixmapItem*> m_tileItems;
+    QNetworkAccessManager* m_network{nullptr};
 
     // View state
-    qreal m_scale{1.0};
+    int m_zoom{15};
     qreal m_centerLat{37.7749};
     qreal m_centerLon{-122.4194};
-    static constexpr qreal SCALE_FACTOR = 100000.0;  // deg-to-scene units
+    bool m_hasFix{false};
+    qreal m_lastLat{0.0};
+    qreal m_lastLon{0.0};
+    qreal m_lastHeading{0.0};
+    QString m_tileUrlTemplate{QStringLiteral("https://tile.openstreetmap.org/%1/%2/%3.png")};
+    static constexpr int TILE_SIZE = 256;
+    static constexpr int TILE_RADIUS = 2;
     static constexpr int MAX_TRACK_POINTS = 500;
 };
 
