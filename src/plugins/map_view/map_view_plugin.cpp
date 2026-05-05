@@ -57,9 +57,8 @@ void MapViewPlugin::buildUi() {
     auto* toolbar = new QHBoxLayout();
     auto* zoomInBtn = new QPushButton(tr("+"));
     auto* zoomOutBtn = new QPushButton(tr("-"));
-    m_coordLabel = new QGraphicsTextItem();  // placeholder, we'll recreate in scene
-    auto* coordText = new QLabel(tr("Lat: ---  Lon: ---"));
-    coordText->setStyleSheet(QStringLiteral("color: %1; padding: 4px; font-family: monospace;")
+    m_coordLabel = new QLabel(tr("Lat: ---  Lon: ---"));
+    m_coordLabel->setStyleSheet(QStringLiteral("color: %1; padding: 4px; font-family: monospace;")
                                 .arg(aegis::ui::ThemeEngine::COLOR_TEXT));
 
     for (auto* btn : {zoomInBtn, zoomOutBtn}) {
@@ -79,7 +78,7 @@ void MapViewPlugin::buildUi() {
     toolbar->addWidget(zoomInBtn);
     toolbar->addWidget(zoomOutBtn);
     toolbar->addStretch();
-    toolbar->addWidget(coordText);
+    toolbar->addWidget(m_coordLabel);
     vbox->addLayout(toolbar);
 
     // Graphics view
@@ -97,8 +96,7 @@ void MapViewPlugin::buildUi() {
 
 void MapViewPlugin::setupScene() {
     // Coordinate grid: 10 major divisions, 100 minor
-    qreal gridSize = 2000.0;
-    qreal majorStep = gridSize / 10.0;
+    qreal gridSize = 20000.0;
 
     // Background
     m_scene->addRect(-gridSize/2, -gridSize/2, gridSize, gridSize,
@@ -168,6 +166,11 @@ void MapViewPlugin::onPositionChanged(const core::types::PositionData& data) {
     m_trackLine->setPath(path);
 
     fitViewToVehicle();
+
+    QString coordText = QStringLiteral("Lat: %1  Lon: %2")
+                            .arg(lat, 0, 'f', 6)
+                            .arg(lon, 0, 'f', 6);
+    if (m_coordLabel) m_coordLabel->setText(coordText);
 }
 
 void MapViewPlugin::onMissionCurrentChanged(int index) {
@@ -177,7 +180,7 @@ void MapViewPlugin::onMissionCurrentChanged(int index) {
 
 void MapViewPlugin::updateVehicleMarker(qreal lat, qreal lon, qreal hdg) {
     QPointF pos = latLonToScene(lat, lon);
-    m_vehicleMarker->setPos(pos.x() - 6, pos.y() - 6);
+    m_vehicleMarker->setPos(pos);
 
     // Heading indicator as a line
     qreal rad = qDegreesToRadians(hdg);
@@ -185,14 +188,13 @@ void MapViewPlugin::updateVehicleMarker(qreal lat, qreal lon, qreal hdg) {
     qreal dy = -qCos(rad) * 20.0;
 
     // Remove old heading line if any and draw new
-    static QGraphicsLineItem* hdgLine = nullptr;
-    if (hdgLine) {
-        m_scene->removeItem(hdgLine);
-        delete hdgLine;
+    if (m_headingLine) {
+        m_scene->removeItem(m_headingLine);
+        delete m_headingLine;
     }
-    hdgLine = m_scene->addLine(pos.x(), pos.y(), pos.x() + dx, pos.y() + dy,
+    m_headingLine = m_scene->addLine(pos.x(), pos.y(), pos.x() + dx, pos.y() + dy,
                                   QPen(QColor(aegis::ui::ThemeEngine::COLOR_WARNING), 2));
-    hdgLine->setZValue(9);
+    m_headingLine->setZValue(9);
 }
 
 QPointF MapViewPlugin::latLonToScene(qreal lat, qreal lon) const {
@@ -203,7 +205,7 @@ QPointF MapViewPlugin::latLonToScene(qreal lat, qreal lon) const {
 
 void MapViewPlugin::fitViewToVehicle() {
     if (!m_vehicleMarker) return;
-    m_view->centerOn(m_vehicleMarker->pos().x() + 6, m_vehicleMarker->pos().y() + 6);
+    m_view->centerOn(m_vehicleMarker);
 }
 
 void MapViewPlugin::zoomIn() {

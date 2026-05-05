@@ -6,7 +6,8 @@
 #include <QGraphicsScene>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsPathItem>
-#include <QGraphicsTextItem>
+#include <QGraphicsLineItem>
+#include <QLabel>
 
 namespace aegis::plugins {
 
@@ -58,7 +59,8 @@ private:
     // Map items
     QGraphicsEllipseItem* m_vehicleMarker{nullptr};
     QGraphicsPathItem* m_trackLine{nullptr};
-    QGraphicsTextItem* m_coordLabel{nullptr};
+    QLabel* m_coordLabel{nullptr};
+    QGraphicsLineItem* m_headingLine{nullptr};
     QVector<QPointF> m_trackHistory;
 
     // View state

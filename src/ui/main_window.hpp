@@ -7,10 +7,17 @@
 #include <QStatusBar>
 #include <QSettings>
 #include <QCloseEvent>
+#include <QHash>
+
+#include "core/types/common.hpp"
+
+namespace aegis::core { class IPlugin; }
 
 namespace aegis::ui {
 
 class DockManager;
+class ConnectionBar;
+class VehicleStatusBar;
 
 /**
  * @brief Primary operator shell with persistent dockable layouts.
@@ -26,6 +33,7 @@ public:
     ~MainWindow() override;
 
     DockManager* dockManager() const { return m_dockManager; }
+    void injectPlugin(aegis::core::IPlugin* plugin);
 
     void restoreLayout();
     void saveLayout();
@@ -36,6 +44,10 @@ signals:
     void pluginLoadRequested(const QString& pluginId);
     void aboutToShutdown();
 
+public slots:
+    void updateConnectionState(aegis::core::types::ConnectionState state);
+    void updateSystemState(const aegis::core::types::SystemState& state);
+
 protected:
     void closeEvent(QCloseEvent* event) override;
 
@@ -45,6 +57,9 @@ private:
     void buildStatusBar();
 
     DockManager* m_dockManager{nullptr};
+    ConnectionBar* m_connectionBar{nullptr};
+    VehicleStatusBar* m_vehicleStatusBar{nullptr};
+    QHash<aegis::core::IPlugin*, QDockWidget*> m_pluginDocks;
     QSettings m_settings;
 };
 

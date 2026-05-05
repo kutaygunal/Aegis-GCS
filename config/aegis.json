@@ -2,7 +2,9 @@
     "pluginPaths": ["./plugins", "C:/Program Files/Aegis/plugins"],
     "autostartPlugins": [
         "aegis.plugins.telemetry_hud",
-        "aegis.plugins.alert_console"
+        "aegis.plugins.alert_console",
+        "aegis.plugins.mission_editor",
+        "aegis.plugins.map_view"
     ],
     "telemetry": {
         "bindAddress": "0.0.0.0",

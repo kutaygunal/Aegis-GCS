@@ -53,7 +53,7 @@ bool Application::initialize() {
             this, &Application::onPluginLoaded);
 
     // ── Telemetry layer ───────────────────────────────────────────────
-    m_mavlinkIO.reset(new aegis::telemetry::MavlinkIO(this));
+    m_mavlinkIO.reset(new aegis::telemetry::MavlinkIO());
     m_mavlinkParser.reset(new aegis::telemetry::MavlinkParser(
         m_bus.data(), m_state.data(), this));
 
@@ -68,11 +68,17 @@ bool Application::initialize() {
     setupConnections();
 
     // ── Plugin discovery ──────────────────────────────────────────────
-    QStringList pluginPaths = m_config.value("pluginPaths").toStringList();
-    if (pluginPaths.isEmpty()) {
-        pluginPaths << QCoreApplication::applicationDirPath() + "/plugins";
-        pluginPaths << QDir::currentPath() + "/plugins";  // fallback
+    QStringList pluginPaths;
+    pluginPaths << (QCoreApplication::applicationDirPath() + "/plugins");
+    pluginPaths << (QDir::currentPath() + "/plugins");
+
+    const QStringList configuredPluginPaths = m_config.value("pluginPaths").toStringList();
+    for (const QString& path : configuredPluginPaths) {
+        if (!pluginPaths.contains(path)) {
+            pluginPaths << path;
+        }
     }
+
     auto discovered = m_pluginHost->discover(pluginPaths);
     qDebug() << "[Application] Discovered" << discovered.size() << "plugins";
 
@@ -89,6 +95,10 @@ bool Application::initialize() {
     connect(dummyTimer, &QTimer::timeout, this, &Application::emitDummyTelemetry);
     dummyTimer->start(100);  // 10 Hz
     m_dummyTimer.reset(dummyTimer);
+
+    // Tell the UI that the dummy telemetry stream is active so the map/status
+    // bar look alive even before a real MAVLink UDP link is opened.
+    m_bus->emitConnectionStateChanged(aegis::core::types::ConnectionState::Connected);
 
     aegis::utils::Logger::instance().setMinLevel(aegis::utils::LogLevel::Debug);
     aegis::utils::Logger::instance().log(
@@ -133,6 +143,18 @@ void Application::setupConnections() {
             this, &Application::onShutdown);
 
     connect(m_bus.data(), &aegis::core::TelemetryBus::connectionStateChanged,
+            m_mainWindow.data(), &aegis::ui::MainWindow::updateConnectionState);
+    connect(m_bus.data(), &aegis::core::TelemetryBus::heartbeatReceived,
+            m_mainWindow.data(), &aegis::ui::MainWindow::updateSystemState);
+
+    connect(m_mavlinkIO.data(), &aegis::telemetry::MavlinkIO::connectionStateChanged,
+            this, [this](bool connected) {
+        m_bus->emitConnectionStateChanged(connected
+            ? aegis::core::types::ConnectionState::Connected
+            : aegis::core::types::ConnectionState::Disconnected);
+    });
+
+    connect(m_bus.data(), &aegis::core::TelemetryBus::connectionStateChanged,
             this, [](aegis::core::types::ConnectionState state) {
         QString msg = (state == aegis::core::types::ConnectionState::Connected)
                           ? "Connected" : "Disconnected";
@@ -159,14 +181,14 @@ void Application::onReplayRequested(const QString& filePath) {
 
 void Application::onPluginLoadRequested(const QString& pluginId) {
     if (auto* plugin = m_pluginHost->load(pluginId)) {
-        m_mainWindow->dockManager()->injectPlugin(plugin);
+        m_mainWindow->injectPlugin(plugin);
     }
 }
 
 void Application::onPluginLoaded(const QString& pluginId) {
     for (auto* p : m_pluginHost->activePlugins()) {
         if (p->pluginId() == pluginId) {
-            m_mainWindow->dockManager()->injectPlugin(p);
+            m_mainWindow->injectPlugin(p);
             qDebug() << "[Application] Injected" << pluginId;
             break;
         }
