@@ -97,35 +97,94 @@ UDP Socket → MavlinkIO → MavlinkParser → VehicleState + TelemetryBus → U
 
 ```text
 aegis-gcs/
+├── AGENTS.md                 # Agent engineering rules for AI contributors
+├── build.bat                 # One-shot clean + build for Windows
+├── CMakeLists.txt            # Root CMake build
 ├── config/
-│   └── aegis.json
+│   └── aegis.json            # Runtime settings schema
+├── docs/                     # HTML/PDF design docs (architecture, UI spec)
+├── orchestration/            # AI task planning system
+│   ├── README.md
+│   ├── prompts/              # Planner / Worker / Reviewer prompts
+│   ├── roadmap.yaml          # Sprint roadmap
+│   ├── runs/                 # Per-task planning + review artifacts
+│   └── tasks.yaml            # Active task registry
 ├── resources/
-│   └── resources.qrc
+│   └── resources.qrc         # Qt resource bundle
 ├── src/
 │   ├── app/
-│   │   ├── application.hpp
-│   │   └── application.cpp
+│   │   ├── application.cpp / .hpp
+│   │   └── main.cpp
 │   ├── core/
-│   │   ├── bus/
-│   │   ├── interfaces/
-│   │   ├── plugin_host/
-│   │   ├── state/
-│   │   └── types/
+│   │   ├── bus/              # TelemetryBus (pub/sub, commands)
+│   │   ├── interfaces/       # IPlugin, ITelemetrySink, ICommandSource
+│   │   ├── plugin_host/      # PluginHost: discover, load, unload
+│   │   ├── state/            # VehicleState (thread-safe model)
+│   │   └── types/            # Common types, MAVLink enums
+│   ├── map/
+│   │   ├── tile_cache.hpp    # Thread-safe LRU tile cache
+│   │   ├── tile_loader.cpp / .hpp  # Concurrent tile fetcher
+│   │   └── tile_types.hpp    # TileCoord, ViewportInfo, TileMetrics
 │   ├── plugins/
-│   │   ├── alert_console/
-│   │   ├── map_view/
-│   │   ├── mission_editor/
-│   │   └── telemetry_hud/
+│   │   ├── alert_console/    # Real-time alert feed
+│   │   ├── map_view/         # 2D map with tiles, vehicle, mission
+│   │   │   ├── follow_vehicle_controller.cpp / .hpp
+│   │   │   ├── map_math.hpp
+│   │   │   ├── map_view_plugin.cpp / .hpp
+│   │   │   └── map_view.json
+│   │   ├── mission_editor/   # Waypoint table + editor
+│   │   └── telemetry_hud/    # Attitude, speed, altitude HUD
 │   ├── telemetry/
+│   │   ├── connection_state_machine.cpp / .hpp
+│   │   ├── mavlink_io.cpp / .hpp
+│   │   ├── parsers.cpp / .hpp
+│   │   ├── types/
+│   │   │   └── mavlink_types.hpp
+│   │   └── replay/
+│   │       └── log_replay.cpp / .hpp
 │   ├── ui/
+│   │   ├── dock_manager.cpp / .hpp
+│   │   ├── main_window.cpp / .hpp
 │   │   ├── theme/
+│   │   │   ├── theme_engine.cpp / .hpp
 │   │   └── widgets/
+│   │       ├── connection_bar.cpp / .hpp
+│   │       └── vehicle_status_bar.cpp / .hpp
 │   └── utils/
+│       ├── config_migrator.cpp / .hpp
+│       ├── config_validator.cpp / .hpp
+│       ├── diagnostic_exporter.cpp / .hpp
+│       ├── logging.cpp / .hpp
+│       ├── ring_buffer.hpp
+│       ├── simple_zip_writer.cpp / .hpp
+│       └── thread_pool.cpp / .hpp
 ├── tests/
+│   ├── CMakeLists.txt
+│   ├── core/                 # TelemetryBus, VehicleState tests
+│   ├── data/replay/
+│   │   └── corpus.tlog       # MAVLink replay regression corpus
+│   ├── map/                  # TileCache, TileLoader tests
+│   ├── plugins/              # MapView math, FollowVehicle tests
+│   │   └── map_view/
+│   ├── telemetry/            # Parsers, IO, state machine, log replay
+│   │   ├── test_connection_state_machine.cpp
+│   │   ├── test_log_replay.cpp
+│   │   ├── test_mavlink_io.cpp
+│   │   ├── test_parsers.cpp
+│   │   └── test_replay_regression.cpp
+│   └── utils/                # Config, migration, diagnostics, logger tests
+│       ├── generate_replay_corpus.cpp
+│       ├── test_config_migrator.cpp
+│       ├── test_config_validator.cpp
+│       ├── test_diagnostic_exporter.cpp
+│       ├── test_logger.cpp
+│       └── test_ring_buffer.cpp
 ├── third_party/
-│   └── mavlink/
-├── CMakeLists.txt
-└── README.md
+│   └── mavlink/              # MAVLink 2 C headers (multi-dialect)
+├── .clang-tidy               # CI static-analysis config
+├── .github/workflows/ci.yml  # GitHub Actions CI pipeline
+├── ScreenShot.png            # UI screenshot
+└── README.md                 # This file
 ```
 
 ---
@@ -260,10 +319,12 @@ config/aegis.json
 
 | Domain | Purpose |
 |---|---|
+| `configVersion` | Schema version for config migration |
 | `pluginPaths` | Additional directories for plugin discovery |
 | `autostartPlugins` | Plugin IDs to load at startup |
-| `telemetry` | UDP bind address, bind port, heartbeat timeout |
-| `logging` | Minimum log level and log file path |
+| `telemetry` | UDP bind address, bind port, heartbeat timeout, reconnect interval |
+| `logging` | Minimum log level, log file path, console output enablement |
+| `map` | Tile URL template, cache size, max concurrent downloads, max retries |
 | `dummyTelemetry` | Offline/demo telemetry generator enablement and interval |
 | `plugins` | Per-plugin settings passed to each plugin during initialization |
 
@@ -271,16 +332,28 @@ config/aegis.json
 
 ```json
 {
+  "configVersion": 2,
   "telemetry": {
     "bindAddress": "0.0.0.0",
     "bindPort": 14550,
-    "heartbeatTimeoutMs": 3000
+    "heartbeatTimeoutMs": 3000,
+    "reconnectIntervalMs": 5000
+  },
+  "logging": {
+    "minLevel": "Debug",
+    "logFilePath": "logs/aegis-%{timestamp}.log",
+    "enableConsole": true
+  },
+  "map": {
+    "tileUrlTemplate": "https://tile.openstreetmap.org/%1/%2/%3.png",
+    "tileCacheSizeMB": 256,
+    "maxConcurrentDownloads": 6,
+    "maxRetries": 2
   },
   "dummyTelemetry": { "enabled": true, "intervalMs": 100 },
   "plugins": {
     "aegis.plugins.map_view": {
-      "zoom": 15,
-      "tileUrlTemplate": "https://tile.openstreetmap.org/%1/%2/%3.png"
+      "zoom": 15
     },
     "aegis.plugins.alert_console": {
       "maxItems": 250,
@@ -313,24 +386,54 @@ The map plugin uses native Qt graphics (no embedded browser):
 |---|---|
 | Tile provider | Configurable URL template, defaulting to `https://tile.openstreetmap.org/%1/%2/%3.png` |
 | Projection | Web Mercator tile coordinate formula |
-| Networking | `QNetworkAccessManager` and `QNetworkReply` |
+| Tile loading | `TileLoader` (thread-safe LRU cache, priority queue, retry, cancellation) |
+| Follow-vehicle | Smooth interpolated panning; suspends when tiles are loading |
 | Rendering | `QGraphicsView`, `QGraphicsScene`, pixmap tile items, path overlay, marker overlay |
 | Zoom | Changes OSM tile zoom level and refreshes tile set |
 
+### Map Architecture
+
+```text
+┌──────────────────────────────────────┐
+│ MapViewPlugin                        │
+│  ┌────────────────────────────────┐ │
+│  │ TileLoader (src/map/)          │ │
+│  │  • LRU cache (QImage, ~256 MB)│ │
+│  │  • Priority queue by viewport  │ │
+│  │  • Concurrent fetch (max 6)    │ │
+│  │  • Retry + backoff             │ │
+│  └────────────────────────────────┘ │
+│  ┌────────────────────────────────┐ │
+│  │ FollowVehicleController        │ │
+│  │  • Active / Suspended / Disabled│ │
+│  │  • Smooth lerp pan             │ │
+│  │  • Tile-readiness gating       │ │
+│  └────────────────────────────────┘ │
+└──────────────────────────────────────┘
+```
 > **Operational note:** OSM tile usage requires respecting the OpenStreetMap tile policy. A commercial deployment should add tile caching, provider attribution, rate limiting, and preferably a dedicated commercial tile provider or offline MBTiles support.
 
 ## Testing
 
-Current automated test targets:
+Current automated test targets (73+ tests across all suites):
 
 | Test Target | Coverage |
 |---|---|
-| `test_telemetry_bus` | Signal delivery, topic pub/sub, outbound commands, command responses |
+| `test_telemetry_bus` | Signal delivery, topic pub/sub, outbound commands |
 | `test_vehicle_state` | Thread-safe state update/getter behavior |
 | `test_ring_buffer` | Fixed-size telemetry history behavior |
 | `test_parsers` | HEARTBEAT, ATTITUDE, GLOBAL_POSITION_INT, BATTERY_STATUS |
 | `test_log_replay` | Replay step and playback completion/progress |
 | `test_mavlink_io` | UDP heartbeat connection and timeout disconnection |
+| `test_connection_state_machine` | 6 deterministic states, explicit transitions, timeouts |
+| `test_config_validator` | Schema validation, defaults, warnings, unknown key handling |
+| `test_config_migrator` | Version-to-version transforms, backup, rollback |
+| `test_diagnostic_exporter` | ZIP bundle creation, log aggregation, chain hash validation |
+| `test_replay_regression` | Replay corpus regression (7 MAVLink message paths) |
+| `test_tile_cache` | LRU eviction, hit rate, byte-size limits |
+| `test_tile_loader` | Priority queue, concurrency limit, retry, cancellation |
+| `test_follow_vehicle` | State machine transitions, smooth interpolation, tile gating |
+| `test_map_math` | Lat/lon to tile/scene coordinate conversions |
 
 ## Plugin Development
 
@@ -384,24 +487,26 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 - [x] Runtime plugin architecture
 - [x] Telemetry bus + shared vehicle state
 - [x] Native Qt map plugin
-- [x] OpenStreetMap raster tile support
+- [x] OpenStreetMap raster tile support (with LRU cache + follow-vehicle)
 - [x] Windows plugin deployment into `Release/plugins`
-- [x] Config-driven telemetry/logging/plugin settings
-- [x] Heartbeat-based connection state and timeout handling
-- [x] Initial parser/replay/UDP test coverage
+- [x] Config-driven telemetry/logging/plugin settings with validation and migration
+- [x] Heartbeat-based connection state machine with formal transitions
+- [x] Diagnostic bundle export and rotating log system
+- [x] CI hardening (clang-tidy, AddressSanitizer, replay regression)
+- [x] Initial parser/replay/UDP test coverage (73+ tests)
 
-### Phase 1 — Commercial-Grade Foundation
+### Phase 1 — Commercial-Grade Foundation (In Progress)
 
-- [ ] Formal connection state machine: socket bound, vehicle discovered, heartbeat alive, degraded, disconnected, reconnecting
-- [ ] Config schema validation and migration system
-- [ ] Structured rotating logs and diagnostic bundle export
+- [x] Formal connection state machine: socket bound, vehicle discovered, heartbeat alive, degraded, disconnected, reconnecting
+- [x] Config schema validation and migration system
+- [x] Structured rotating logs and diagnostic bundle export
 - [ ] Crash reporting and recovery workflow
 - [ ] MAVLink command ACK handling
 - [ ] Failsafe alerting: heartbeat lost, GPS lost, low battery, EKF unhealthy, RC lost, geofence breach
 - [ ] Command confirmation workflow for arm/disarm, mission upload, RTL, and emergency commands
 - [ ] Tamper-evident command/event audit log
 - [ ] Read-only/demo/operator modes separated from real control mode
-- [ ] CI hardening with static analysis, sanitizers, and replay regression tests
+- [x] CI hardening with static analysis, sanitizers, and replay regression tests
 
 ### Phase 2 — Real GCS Functionality
 
@@ -417,12 +522,12 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 
 ### Phase 3 — Map and Navigation
 
-- [ ] Tile disk cache
+- [x] Tile disk cache → in-memory LRU cache (TileLoader)
 - [ ] Offline maps and MBTiles support
 - [ ] Multiple map providers: OSM, satellite, terrain, enterprise/custom tile servers
 - [ ] Map provider attribution and rate-limit controls
-- [ ] Mouse panning, zoom-to-vehicle, and follow-vehicle toggle
-- [ ] Home position marker, vehicle trail persistence, and return-to-home visualization
+- [x] Mouse panning, zoom-to-vehicle, and follow-vehicle toggle
+- [x] Home position marker, vehicle trail persistence, and return-to-home visualization
 - [ ] Distance/bearing measurement tool
 - [ ] No-fly zone and ADS-B/traffic overlays
 - [ ] Optional WebEngine/Cesium 3D globe integration
