@@ -12,26 +12,30 @@ tasks:
 
   - id: P1-007
     phase: P1
-    title: Crash reporting and recovery workflow
+    title: Dynamic map tile loading for off-center viewport
     priority: high
-    area: infrastructure
+    area: map
     risk: medium
-    depends_on: [P1-002, P1-003]
+    depends_on: []
     acceptance:
-      - A crash handler captures unhandled exceptions and signals (e.g., SIGSEGV, SIGABRT) and writes a minidump or stack trace.
-      - Crash reports are collected into a dedicated crash directory with timestamp and process info.
-      - On next startup, a recovery workflow checks for pending crash reports and offers to export them as a diagnostic bundle.
-      - Plugin crashes are isolated: a segfault in a plugin must not bring down the shell (where feasible via process isolation or robust error boundaries).
-      - Crash report collection is optional and can be disabled via config.
+      - The map plugin computes which tiles are visible in the current QGraphicsView viewport.
+      - As the vehicle moves or the view pans, missing tiles for newly visible areas are requested and rendered.
+      - No black/empty gaps appear when the drone moves outside the initially loaded tile set.
+      - Zoom in/out still clears and rebuilds the tile set correctly.
+      - Tile requests are deduplicated; already-loaded or in-flight tiles are not re-requested.
+      - The implementation does not block the main thread; tiles load asynchronously via QNetworkAccessManager.
+      - Map remains usable with dummy telemetry generator moving across tile boundaries.
     implementation_rules:
-      - Use a lightweight crash handler (e.g., Google Breakpad, Crashpad, or a custom signal handler + stack walker). Justify any new dependency.
-      - Keep the crash handler separate from business logic; it runs at the lowest level.
-      - Do not collect sensitive user data in crash dumps.
-      - Add tests for crash report generation and recovery workflow (use fork or mock signals where possible).
+      - Hook into the view change event (e.g., scroll, resize, vehicle-position-driven centering) to trigger tile updates.
+      - Compute visible tile range from the current view rect and scene transform, not just from the initial center lat/lon.
+      - Keep the existing TILE_RADIUS logic or replace it with viewport-based visibility; either way, only load tiles that are actually visible plus a small prefetch margin.
+      - Preserve existing tile caching in m_tileItems to avoid re-requesting already loaded tiles.
+      - Do not break zoom in/out behavior; ensure m_centerLat/m_centerLon stays coherent with the view center.
+      - Add a lightweight unit test for the tile-visibility math (scene rect -> tile x/y range) without requiring network.
     test_commands:
       - cmake --build build --config Release
       - ctest --test-dir build --output-on-failure
-    status: planned
+    status: ready
 
 # ═══════════════════════════════════════════════════════════════
 # SPRINT 2 — Safety Core

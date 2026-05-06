@@ -282,7 +282,7 @@ The orchestration system is a tool, not an autopilot.
 ## Current Execution Lane
 
 ### Sprint 1 — Reliability Core (active)
-1. P1-007: Crash reporting and recovery workflow ← **Next task**
+1. P1-007: Dynamic map tile loading for off-center viewport ← **Next task**
 
 ### Sprint 2 — Safety Core (planned)
 1. P2-001: MAVLink command ACK handling
