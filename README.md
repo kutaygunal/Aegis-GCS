@@ -10,6 +10,8 @@
 
 AEGIS GCS is a **desktop Ground Control Station** written in **C++20** with **Qt6 Widgets**. It ingests MAVLink telemetry over UDP, maintains a thread-safe shared vehicle state model, and exposes functionality through **runtime-loaded plugins** using `QPluginLoader`.
 
+![AEGIS GCS Screenshot](ScreenShot.png)
+
 ### Current implemented capabilities
 
 - Runtime plugin discovery and loading
