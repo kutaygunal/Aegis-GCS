@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QHash>
+#include <QMetaType>
 #include <QPixmap>
 #include <QString>
 
@@ -38,3 +39,5 @@ struct TileMetrics {
 };
 
 } // namespace aegis::map
+
+Q_DECLARE_METATYPE(aegis::map::TileCoord)

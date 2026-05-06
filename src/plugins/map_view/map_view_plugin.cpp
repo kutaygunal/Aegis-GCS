@@ -33,10 +33,8 @@ bool MapViewPlugin::initialize(core::TelemetryBus* bus,
         QStringLiteral("https://tile.openstreetmap.org/%1/%2/%3.png")).toString();
     m_state = state;
     m_bus = bus;
-    buildUi();
-    setupScene();
 
-    // TileLoader
+    // TileLoader MUST exist before setupScene() calls updateTiles()
     m_tileLoader = new aegis::map::TileLoader(this);
     QJsonObject tileConfig;
     tileConfig["tileUrlTemplate"] = m_tileUrlTemplate;
@@ -50,10 +48,14 @@ bool MapViewPlugin::initialize(core::TelemetryBus* bus,
     connect(m_tileLoader, &aegis::map::TileLoader::tileFailed,
             this, &MapViewPlugin::onTileFailed);
 
-    // Follow-vehicle controller
+    buildUi();
+
+    // Follow-vehicle controller needs m_view which is created in buildUi()
     m_followController = new FollowVehicleController(m_view, this);
     connect(m_followController, &FollowVehicleController::stateChanged,
             this, &MapViewPlugin::onFollowStateChanged);
+
+    setupScene();
 
     connect(bus, &core::TelemetryBus::positionChanged,
             this, &MapViewPlugin::onPositionChanged,
@@ -279,6 +281,17 @@ void MapViewPlugin::updateVisibleTiles() {
     const QRectF viewport = visibleSceneRect();
     if (viewport.isEmpty()) return;
 
+    // Update TileLoader viewport for priority + tile-ready tracking
+    aegis::map::ViewportInfo vp;
+    vp.zoom = m_zoom;
+    vp.centerLat = m_centerLat;
+    vp.centerLon = m_centerLon;
+    if (m_view) {
+        vp.widthPx = m_view->viewport()->width();
+        vp.heightPx = m_view->viewport()->height();
+    }
+    m_tileLoader->setViewport(vp);
+
     const QPointF centerWorld = latLonToWorldPixel(m_centerLat, m_centerLon);
     const QRect range = map_math::visibleTileRange(viewport, centerWorld, m_zoom, TILE_SIZE);
 
@@ -323,6 +336,17 @@ void MapViewPlugin::removeOffscreenTiles(const QRectF& viewport) {
 
 void MapViewPlugin::updateTiles() {
     if (!m_scene || !m_tileLoader) return;
+
+    // Update TileLoader viewport for priority
+    aegis::map::ViewportInfo vp;
+    vp.zoom = m_zoom;
+    vp.centerLat = m_centerLat;
+    vp.centerLon = m_centerLon;
+    if (m_view) {
+        vp.widthPx = m_view->viewport()->width();
+        vp.heightPx = m_view->viewport()->height();
+    }
+    m_tileLoader->setViewport(vp);
 
     const QPointF center = latLonToWorldPixel(m_centerLat, m_centerLon);
     const int centerTileX = qFloor(center.x() / TILE_SIZE);
