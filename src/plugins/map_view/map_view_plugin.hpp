@@ -2,6 +2,7 @@
 
 #include "core/interfaces/itelemetry_sink.hpp"
 #include "core/types/common.hpp"
+#include "map_math.hpp"
 #include <QGraphicsView>
 #include <QGraphicsScene>
 #include <QGraphicsEllipseItem>
@@ -55,6 +56,9 @@ private:
     QPointF latLonToWorldPixel(qreal lat, qreal lon) const;
     QPointF tileToScene(int x, int y) const;
     void updateTiles();
+    void updateVisibleTiles();
+    void removeOffscreenTiles(const QRectF& viewport);
+    QRectF visibleSceneRect() const;
     void requestTile(int x, int y);
     void fitViewToVehicle();
 

@@ -96,3 +96,10 @@ target_compile_definitions(test_replay_regression PRIVATE
 target_link_libraries(test_replay_regression PRIVATE
     aegis_core aegis_telemetry Qt6::Core Qt6::Test GTest::gtest_main)
 add_test(NAME ReplayRegression COMMAND test_replay_regression)
+
+add_executable(test_map_math
+    plugins/test_map_math.cpp
+)
+target_include_directories(test_map_math PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_map_math PRIVATE Qt6::Core GTest::gtest_main)
+add_test(NAME MapMath COMMAND test_map_math)
