@@ -87,3 +87,12 @@ add_executable(test_config_migrator
 target_link_libraries(test_config_migrator PRIVATE
     aegis_utils Qt6::Core Qt6::Test GTest::gtest_main)
 add_test(NAME ConfigMigrator COMMAND test_config_migrator)
+
+add_executable(test_replay_regression
+    telemetry/test_replay_regression.cpp
+)
+target_compile_definitions(test_replay_regression PRIVATE
+    REPLAY_CORPUS_PATH="${CMAKE_SOURCE_DIR}/tests/data/replay/corpus.tlog")
+target_link_libraries(test_replay_regression PRIVATE
+    aegis_core aegis_telemetry Qt6::Core Qt6::Test GTest::gtest_main)
+add_test(NAME ReplayRegression COMMAND test_replay_regression)

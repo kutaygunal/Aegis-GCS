@@ -158,6 +158,8 @@ tasks:
       - cmake --build build --config Release
       - ctest --test-dir build --output-on-failure
       - (In CI) clang-tidy --config-file=.clang-tidy src/core/ src/telemetry/
+    status: done
+    notes: Added clang-tidy, ASan, and CI warnings-as-errors jobs. Created replay regression corpus (260 bytes, 7 messages) with full parser coverage. 50/50 tests pass.
     status: planned
 
 

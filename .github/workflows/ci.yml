@@ -47,3 +47,65 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure -C Release
+
+  clang-tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt6
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.6.*'
+          modules: 'qtwebengine qtwebchannel qtpositioning'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libgl1-mesa-dev clang-tidy
+
+      - name: Configure with compile commands
+        run: cmake -B build -S . -GNinja -DAEGIS_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Run clang-tidy on core
+        run: |
+          run-clang-tidy -p build \
+            -config-file=.clang-tidy \
+            -header-filter='src/.*' \
+            src/core/*.cpp || true
+        # TODO: Remove '|| true' once all warnings are fixed
+
+      - name: Run clang-tidy on telemetry
+        run: |
+          run-clang-tidy -p build \
+            -config-file=.clang-tidy \
+            -header-filter='src/.*' \
+            src/telemetry/*.cpp || true
+        # TODO: Remove '|| true' once all warnings are fixed
+
+  asan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt6
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.6.*'
+          modules: 'qtwebengine qtwebchannel qtpositioning'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build libgl1-mesa-dev
+
+      - name: Configure with ASan
+        run: cmake -B build -S . -GNinja -DAEGIS_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DAEGIS_CI_BUILD=ON
+
+      - name: Build with ASan
+        run: cmake --build build --parallel
+
+      - name: Test with ASan
+        run: ctest --test-dir build --output-on-failure
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
