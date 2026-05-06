@@ -17,6 +17,7 @@ This prevents scope creep, preserves architecture, and keeps every change review
 | `../AGENTS.md` | Engineering rules that all agents must follow. Read this first. |
 | `roadmap.yaml` | High-level roadmap organized into phases. Defines goals and deliverables. |
 | `tasks.yaml` | Concrete task registry. Each task has acceptance criteria, dependencies, test commands, and status. |
+| `completed_tasks.yaml` | Archive of finished tasks (cut from `tasks.yaml` for readability and token savings). |
 | `prompts/planner.md` | Reusable prompt for the Planner agent. Produces implementation plans. |
 | `prompts/worker.md` | Reusable prompt for the Worker agent. Implements exactly one task. |
 | `prompts/reviewer.md` | Reusable prompt for the Reviewer agent. Reviews diffs against acceptance criteria. |
@@ -132,7 +133,8 @@ The Reviewer returns one of:
 
 ---
 
-### Step 9 — Create Summary
+### Step 9 — Create Summary & Archive Task
+
 1. Merge the approved feature branch into `main`:
 ```bash
 git checkout main
@@ -150,6 +152,19 @@ status: done
 notes: >
   Implemented ... All N tests pass. No architecture violations.
 ```
+
+4. **Archive the completed task:**
+   - **Cut** the entire task entry from `orchestration/tasks.yaml`.
+   - **Paste** it into `orchestration/completed_tasks.yaml` under the `completed_tasks:` list.
+   - Ensure the task is **no longer present** in `tasks.yaml`.
+   - Commit both files together:
+```bash
+git add orchestration/tasks.yaml orchestration/completed_tasks.yaml
+git commit -m "Archive P1-XXX: move completed task to completed_tasks.yaml"
+git push origin main
+```
+
+> **Why:** Keeping `tasks.yaml` lean improves readability and reduces token usage when agents read the active registry. The archive preserves full history for reference.
 
 **Final artifacts in `runs/`:**
 ```
@@ -267,12 +282,7 @@ The orchestration system is a tool, not an autopilot.
 ## Current Execution Lane
 
 ### Sprint 1 — Reliability Core (active)
-1. P1-001: Formal connection state machine ← **Next task**
-2. P1-002: Structured rotating logs
-3. P1-003: Diagnostic bundle export
-4. P1-004: Config schema validation
-5. P1-005: Config migration system
-6. P1-006: CI hardening
+1. P1-007: Crash reporting and recovery workflow ← **Next task**
 
 ### Sprint 2 — Safety Core (planned)
 1. P2-001: MAVLink command ACK handling
