@@ -147,9 +147,9 @@ void MapViewPlugin::onPositionChanged(const core::types::PositionData& data) {
         m_hasFix = true;
     }
 
-    m_trackHistory.append(latLonToScene(lat, lon));
-    if (m_trackHistory.size() > MAX_TRACK_POINTS) {
-        m_trackHistory.removeFirst();
+    m_trackHistoryLatLon.append(qMakePair(lat, lon));
+    if (m_trackHistoryLatLon.size() > MAX_TRACK_POINTS) {
+        m_trackHistoryLatLon.removeFirst();
     }
 
     updateVehicleMarker(lat, lon, hdg);
@@ -158,10 +158,12 @@ void MapViewPlugin::onPositionChanged(const core::types::PositionData& data) {
 
     // Update track polyline
     QPainterPath path;
-    if (!m_trackHistory.isEmpty()) {
-        path.moveTo(m_trackHistory.first());
-        for (int i = 1; i < m_trackHistory.size(); ++i) {
-            path.lineTo(m_trackHistory[i]);
+    if (!m_trackHistoryLatLon.isEmpty()) {
+        path.moveTo(latLonToScene(m_trackHistoryLatLon.first().first,
+                                   m_trackHistoryLatLon.first().second));
+        for (int i = 1; i < m_trackHistoryLatLon.size(); ++i) {
+            path.lineTo(latLonToScene(m_trackHistoryLatLon[i].first,
+                                       m_trackHistoryLatLon[i].second));
         }
     }
     m_trackLine->setPath(path);
@@ -303,22 +305,58 @@ void MapViewPlugin::fitViewToVehicle() {
 
 void MapViewPlugin::zoomIn() {
     if (m_zoom >= 19) return;
-    ++m_zoom;
-    m_tileItems.clear();
-    m_headingLine = nullptr;
-    m_scene->clear();
-    setupScene();
-    if (m_hasFix) updateVehicleMarker(m_lastLat, m_lastLon, m_lastHeading);
+    applyZoom(m_zoom + 1);
 }
 
 void MapViewPlugin::zoomOut() {
     if (m_zoom <= 1) return;
-    --m_zoom;
+    applyZoom(m_zoom - 1);
+}
+
+void MapViewPlugin::applyZoom(int newZoom) {
+    if (newZoom == m_zoom) return;
+    m_zoom = newZoom;
+
+    // 1. Remove all tile items (but keep vehicle, track, crosshair)
+    for (auto* item : m_tileItems) {
+        m_scene->removeItem(item);
+        delete item;
+    }
     m_tileItems.clear();
-    m_headingLine = nullptr;
-    m_scene->clear();
-    setupScene();
-    if (m_hasFix) updateVehicleMarker(m_lastLat, m_lastLon, m_lastHeading);
+
+    // 2. Remove heading line (will be recreated by updateVehicleMarker)
+    if (m_headingLine) {
+        m_scene->removeItem(m_headingLine);
+        delete m_headingLine;
+        m_headingLine = nullptr;
+    }
+
+    // 3. Update scene extent for new zoom
+    const qreal sceneExtent = TILE_SIZE * (TILE_RADIUS * 2 + 3);
+    m_scene->setSceneRect(-sceneExtent / 2, -sceneExtent / 2, sceneExtent, sceneExtent);
+
+    // 4. Reposition vehicle marker + heading with new zoom math
+    if (m_hasFix) {
+        QPointF pos = latLonToScene(m_lastLat, m_lastLon);
+        m_vehicleMarker->setPos(pos);
+        updateVehicleMarker(m_lastLat, m_lastLon, m_lastHeading);
+    }
+
+    // 5. Recompute track line with new zoom (reproject all historical points)
+    QPainterPath path;
+    if (!m_trackHistoryLatLon.isEmpty()) {
+        path.moveTo(latLonToScene(m_trackHistoryLatLon.first().first,
+                                   m_trackHistoryLatLon.first().second));
+        for (int i = 1; i < m_trackHistoryLatLon.size(); ++i) {
+            path.lineTo(latLonToScene(m_trackHistoryLatLon[i].first,
+                                       m_trackHistoryLatLon[i].second));
+        }
+    }
+    m_trackLine->setPath(path);
+
+    // 6. Load tiles at new zoom
+    updateTiles();
+    if (m_hasFix) fitViewToVehicle();
 }
 
 void MapViewPlugin::onTileDownloaded() {

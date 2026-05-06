@@ -46,6 +46,7 @@ private slots:
     void onMissionCurrentChanged(int index);
     void zoomIn();
     void zoomOut();
+    void applyZoom(int newZoom);
     void onTileDownloaded();
 
 private:
@@ -73,7 +74,7 @@ private:
     QGraphicsPathItem* m_trackLine{nullptr};
     QLabel* m_coordLabel{nullptr};
     QGraphicsLineItem* m_headingLine{nullptr};
-    QVector<QPointF> m_trackHistory;
+    QVector<QPair<qreal, qreal>> m_trackHistoryLatLon;
     QHash<QString, QGraphicsPixmapItem*> m_tileItems;
     QNetworkAccessManager* m_network{nullptr};
 
