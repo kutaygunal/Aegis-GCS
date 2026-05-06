@@ -1,167 +1,37 @@
-# AEGIS GCS — Task Registry
+# AEGIS GCS — Active Task Registry
 # Tasks are ordered by dependency. Do not start a task until all depends_on tasks are done.
 # Status values: planned | ready | in_progress | review | done | blocked
 
 ---
 
 # ═══════════════════════════════════════════════════════════════
-# SPRINT 1 — Reliability Core
+# SPRINT 1 — Reliability Core (remaining)
 # ═══════════════════════════════════════════════════════════════
 
 tasks:
 
-  - id: P1-001
+  - id: P1-007
     phase: P1
-    title: Formal connection state machine
-    priority: critical
-    area: telemetry
-    risk: high
-    depends_on: []
-    acceptance:
-      - Connection states include socket_bound, vehicle_discovered, heartbeat_alive, degraded, disconnected, reconnecting.
-      - State transitions are deterministic and unit-tested.
-      - Timeout behavior is covered by simulated heartbeat or replay tests.
-      - UI receives state updates through the telemetry bus.
-      - State machine can be tested without real UDP.
-    implementation_rules:
-      - Do not mix socket ownership with UI logic.
-      - Keep the state machine independent from widgets.
-      - Keep MAVLink parsing separate from connection-state transitions.
-      - Add tests for normal heartbeat, timeout, reconnect, degraded, and disconnect scenarios.
-    test_commands:
-      - cmake --build build --config Release
-      - ctest --test-dir build --output-on-failure
-    status: done
-    notes: >
-      Implemented ConnectionStateMachine with 6 states. All 15 tests pass.
-      MavlinkIO now feeds events to the state machine. UI displays all states
-      via ConnectionBar with color coding. TelemetryBus propagates full enum.
-
-  - id: P1-002
-    phase: P1
-    title: Structured rotating logs
+    title: Crash reporting and recovery workflow
     priority: high
     area: infrastructure
     risk: medium
-    depends_on: []
+    depends_on: [P1-002, P1-003]
     acceptance:
-      - Logger writes to a rotating set of files (max size, max count).
-      - Log format includes timestamp, level, component, thread ID, and message.
-      - Rotation is trigger-safe (no log loss during rotation).
-      - Existing logger API remains compatible; change is internal.
-      - Config key "logging.maxFiles" and "logging.maxSizeBytes" are honored.
+      - A crash handler captures unhandled exceptions and signals (e.g., SIGSEGV, SIGABRT) and writes a minidump or stack trace.
+      - Crash reports are collected into a dedicated crash directory with timestamp and process info.
+      - On next startup, a recovery workflow checks for pending crash reports and offers to export them as a diagnostic bundle.
+      - Plugin crashes are isolated: a segfault in a plugin must not bring down the shell (where feasible via process isolation or robust error boundaries).
+      - Crash report collection is optional and can be disabled via config.
     implementation_rules:
-      - Extend the existing custom thread-safe logger; do not replace it.
-      - Rotation must be atomic from the caller's perspective.
-      - Log level filtering remains at the existing entry points.
-      - Add tests for rotation boundary, thread safety, and config integration.
+      - Use a lightweight crash handler (e.g., Google Breakpad, Crashpad, or a custom signal handler + stack walker). Justify any new dependency.
+      - Keep the crash handler separate from business logic; it runs at the lowest level.
+      - Do not collect sensitive user data in crash dumps.
+      - Add tests for crash report generation and recovery workflow (use fork or mock signals where possible).
     test_commands:
       - cmake --build build --config Release
       - ctest --test-dir build --output-on-failure
-    status: done
-
-  - id: P1-003
-    phase: P1
-    title: Diagnostic bundle export
-    priority: high
-    area: infrastructure
-    risk: medium
-    depends_on: [P1-002]
-    acceptance:
-      - A function/method can export a ZIP bundle containing recent logs, config JSON, and a manifest.
-      - Bundle generation is triggered via TelemetryBus signal (for UI integration) and callable directly.
-      - Manifest includes timestamp, git revision (if available), and file list.
-      - Exported bundle does not block the main thread (uses background thread or QtConcurrent).
-      - Error cases (missing log files, disk full) are handled gracefully.
-    implementation_rules:
-      - Use Qt's QZipWriter or std::filesystem + a minimal ZIP library (justify if adding dependency).
-      - Do not include sensitive data (passwords, keys) in the bundle.
-      - Bundle path is configurable via config key "diagnostics.exportPath".
-      - Add tests for bundle creation, manifest contents, and error paths.
-    test_commands:
-      - cmake --build build --config Release
-      - ctest --test-dir build --output-on-failure
-    status: done
-    notes: Implemented DiagnosticExporter with inline SimpleZipWriter. 7/7 tests pass.
     status: planned
-
-  - id: P1-004
-    phase: P1
-    title: Config schema validation
-    priority: high
-    area: infrastructure
-    risk: medium
-    depends_on: []
-    acceptance:
-      - A JSON schema (or equivalent declarative spec) exists for config/aegis.json.
-      - Schema covers all implemented config domains: pluginPaths, autostartPlugins, telemetry, logging, dummyTelemetry, plugins.
-      - Config is validated at load time; invalid keys/values produce warnings or errors with file:line context.
-      - Unknown keys are warned but not fatal (forward compatibility).
-      - Missing required keys use sensible built-in defaults.
-    implementation_rules:
-      - Prefer a lightweight validation approach (e.g., Qt JSON + simple validator class) over a heavy external schema library.
-      - If an external library is needed, it must be a separate task with build integration.
-      - Validation must run before any service is initialized.
-      - Add tests for valid config, missing required keys, wrong types, unknown keys, and nested plugin config errors.
-    test_commands:
-      - cmake --build build --config Release
-      - ctest --test-dir build --output-on-failure
-    status: done
-    notes: Implemented ConfigValidator with declarative SchemaRule DSL. 11/11 tests pass. All prior tests pass.
-    status: planned
-
-  - id: P1-005
-    phase: P1
-    title: Config migration system
-    priority: medium
-    area: infrastructure
-    risk: low
-    depends_on: [P1-004]
-    acceptance:
-      - Config file has a version field (e.g., "configVersion": 1).
-      - A migration registry maps version N to version N+1 transformations.
-      - On load, if config version is older than app target version, migrations run automatically.
-      - Migrations are pure data transforms; they do not depend on Qt services.
-      - A backup of the original config is written before migration.
-      - Migration failures are logged and the app falls back to defaults.
-    implementation_rules:
-      - Migrations are small, testable functions: (QJsonObject old) -> QJsonObject new.
-      - Keep migration functions stateless and isolated.
-      - Do not delete unknown keys during migration (preserve forward-compat data).
-      - Add tests for each migration step and for chained multi-step migrations.
-    test_commands:
-      - cmake --build build --config Release
-      - ctest --test-dir build --output-on-failure
-    status: done
-    notes: Implemented ConfigMigrator with registry, chain runner, and backup writer. v1->v2 and v2->v3 registered. 9/9 tests pass.
-    status: planned
-
-  - id: P1-006
-    phase: P1
-    title: CI hardening
-    priority: medium
-    area: infrastructure
-    risk: low
-    depends_on: []
-    acceptance:
-      - GitHub Actions workflow runs on Windows and Linux.
-      - clang-tidy checks run on the core and telemetry source.
-      - AddressSanitizer (or equivalent) runs on Linux tests.
-      - A replay regression test corpus is added: a set of .tlog or binary MAVLink files that exercise parser paths.
-      - CI fails on compiler warnings treated as errors (selectively, not globally).
-    implementation_rules:
-      - Extend existing .github/workflows/; do not replace the whole CI system.
-      - clang-tidy config should start permissive and tighten over time.
-      - Replay corpus files go in tests/data/replay/ and are committed as LFS or small binary.
-      - Sanitizer failures must fail the CI job.
-    test_commands:
-      - cmake --build build --config Release
-      - ctest --test-dir build --output-on-failure
-      - (In CI) clang-tidy --config-file=.clang-tidy src/core/ src/telemetry/
-    status: done
-    notes: Added clang-tidy, ASan, and CI warnings-as-errors jobs. Created replay regression corpus (260 bytes, 7 messages) with full parser coverage. 50/50 tests pass.
-    status: planned
-
 
 # ═══════════════════════════════════════════════════════════════
 # SPRINT 2 — Safety Core
@@ -288,7 +158,6 @@ tasks:
       - cmake --build build --config Release
       - ctest --test-dir build --output-on-failure
     status: planned
-
 
 # ═══════════════════════════════════════════════════════════════
 # SPRINT 3 — Real GCS Core
@@ -432,7 +301,6 @@ tasks:
       - cmake --build build --config Release
       - ctest --test-dir build --output-on-failure
     status: planned
-
 
 # ═══════════════════════════════════════════════════════════════
 # Backlog — Future Phases (P4-P8)

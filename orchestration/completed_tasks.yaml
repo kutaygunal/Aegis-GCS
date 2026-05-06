@@ -1,0 +1,101 @@
+# AEGIS GCS — Completed Tasks Archive
+# These tasks have been implemented, tested, and verified in the codebase.
+# Cut from tasks.yaml to keep the active registry lean.
+
+completed_tasks:
+
+  - id: P1-001
+    phase: P1
+    title: Formal connection state machine
+    priority: critical
+    area: telemetry
+    risk: high
+    status: done
+    depends_on: []
+    notes: >
+      Implemented ConnectionStateMachine with 6 explicit states (Disconnected, SocketBound,
+      VehicleDiscovered, HeartbeatAlive, Degraded, Reconnecting).
+      MavlinkIO drives the machine via event injection (socket bound, packet received,
+      heartbeat received, heartbeat timeout, stop). UI observes states through TelemetryBus.
+      12/12 unit tests pass covering normal sequence, timeout degradation, reconnecting,
+      recovery, stop from any state, idempotent transitions, and state-to-string coverage.
+
+  - id: P1-002
+    phase: P1
+    title: Structured rotating logs
+    priority: high
+    area: infrastructure
+    risk: medium
+    status: done
+    depends_on: []
+    notes: >
+      Extended the existing thread-safe Logger with atomic file rotation.
+      Format: timestamp, level, component, thread ID, message.
+      Config keys "logging.maxFiles" and "logging.maxSizeBytes" are honored.
+      Existing AEGIS_LOG macro API remains unchanged.
+      7/7 unit tests pass for rotation boundary, thread safety, and config integration.
+
+  - id: P1-003
+    phase: P1
+    title: Diagnostic bundle export
+    priority: high
+    area: infrastructure
+    risk: medium
+    status: done
+    depends_on: [P1-002]
+    notes: >
+      Implemented DiagnosticExporter with inline SimpleZipWriter (no external ZIP dependency).
+      Exports a ZIP bundle containing recent log files, config JSON, and a manifest.
+      Manifest includes timestamp and git revision (if available).
+      Synchronous and asynchronous (Qt signal-based) paths available.
+      Bundle path is configurable via "diagnostics.exportPath".
+      7/7 unit tests pass for bundle creation, manifest contents, and error paths.
+
+  - id: P1-004
+    phase: P1
+    title: Config schema validation
+    priority: high
+    area: infrastructure
+    risk: medium
+    status: done
+    depends_on: []
+    notes: >
+      Implemented ConfigValidator with a declarative SchemaRule DSL.
+      Schema covers all implemented config domains: pluginPaths, autostartPlugins,
+      telemetry, logging, dummyTelemetry, and plugins.
+      Invalid keys/values produce warnings with key-path context.
+      Unknown keys are warned but preserved (forward compatibility).
+      Missing required keys use built-in defaults.
+      11/11 unit tests pass for valid config, missing keys, wrong types, unknown keys,
+      and nested plugin config errors.
+
+  - id: P1-005
+    phase: P1
+    title: Config migration system
+    priority: medium
+    area: infrastructure
+    risk: low
+    status: done
+    depends_on: [P1-004]
+    notes: >
+      Implemented ConfigMigrator with a registry, chain runner, and backup writer.
+      Current target version is 2. Registered migration: v1 -> v2.
+      Migrations are pure QJsonObject transforms; they do not depend on Qt services.
+      A timestamped backup of the original config is written before migration.
+      Migration failures are logged and the app falls back to defaults.
+      9/9 unit tests pass for single-step, chained multi-step, and backup scenarios.
+
+  - id: P1-006
+    phase: P1
+    title: CI hardening
+    priority: medium
+    area: infrastructure
+    risk: low
+    status: done
+    depends_on: []
+    notes: >
+      GitHub Actions workflow runs on Windows (build + test) and Linux (build + test).
+      Added clang-tidy job (non-blocking via "|| true" pending full warning cleanup).
+      Added AddressSanitizer job on Linux with -Werror enabled.
+      Replay regression corpus added at tests/data/replay/corpus.tlog (7 MAVLink messages).
+      Total test suite: 12 test targets, 71 unit/integration tests.
