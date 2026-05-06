@@ -10,12 +10,12 @@
 #include <QPen>
 #include <QBrush>
 #include <QGraphicsPolygonItem>
-#include <QNetworkReply>
-#include <QNetworkRequest>
 #include <QPixmap>
 #include <QPolygonF>
 #include <QDebug>
 #include <QtMath>
+#include <QJsonObject>
+#include <QMouseEvent>
 
 namespace aegis::plugins {
 
@@ -32,8 +32,28 @@ bool MapViewPlugin::initialize(core::TelemetryBus* bus,
         "tileUrlTemplate",
         QStringLiteral("https://tile.openstreetmap.org/%1/%2/%3.png")).toString();
     m_state = state;
+    m_bus = bus;
     buildUi();
     setupScene();
+
+    // TileLoader
+    m_tileLoader = new aegis::map::TileLoader(this);
+    QJsonObject tileConfig;
+    tileConfig["tileUrlTemplate"] = m_tileUrlTemplate;
+    tileConfig["maxConcurrentDownloads"] = config.value("maxConcurrentDownloads", 6).toInt();
+    tileConfig["maxRetries"] = config.value("maxRetries", 2).toInt();
+    tileConfig["tileCacheSizeMB"] = config.value("tileCacheSizeMB", 256).toInt();
+    m_tileLoader->setConfig(tileConfig);
+
+    connect(m_tileLoader, &aegis::map::TileLoader::tileReady,
+            this, &MapViewPlugin::onTileReady);
+    connect(m_tileLoader, &aegis::map::TileLoader::tileFailed,
+            this, &MapViewPlugin::onTileFailed);
+
+    // Follow-vehicle controller
+    m_followController = new FollowVehicleController(m_view, this);
+    connect(m_followController, &FollowVehicleController::stateChanged,
+            this, &MapViewPlugin::onFollowStateChanged);
 
     connect(bus, &core::TelemetryBus::positionChanged,
             this, &MapViewPlugin::onPositionChanged,
@@ -50,6 +70,18 @@ QWidget* MapViewPlugin::widget() {
 }
 
 void MapViewPlugin::shutdown() {}
+
+bool MapViewPlugin::eventFilter(QObject* obj, QEvent* event) {
+    if (obj == m_view->viewport()) {
+        if (event->type() == QEvent::MouseMove) {
+            auto* me = reinterpret_cast<QMouseEvent*>(event);
+            if (me->buttons() & Qt::LeftButton) {
+                m_followController->onUserPanned();
+            }
+        }
+    }
+    return QObject::eventFilter(obj, event);
+}
 
 void MapViewPlugin::buildUi() {
     m_widget = new QWidget();
@@ -85,6 +117,28 @@ void MapViewPlugin::buildUi() {
     toolbar->addWidget(zoomInBtn);
     toolbar->addWidget(zoomOutBtn);
     toolbar->addStretch();
+
+    // Re-center button (hidden by default)
+    m_recenterBtn = new QPushButton(tr("Re-center"));
+    m_recenterBtn->setVisible(false);
+    m_recenterBtn->setStyleSheet(QStringLiteral(
+        "QPushButton { background-color: %1; color: %2; border: 1px solid %3; "
+        "padding: 4px 12px; font-size: 11px; }"
+        "QPushButton:hover { background-color: #37474F; }"
+    ).arg(aegis::ui::ThemeEngine::COLOR_SURFACE,
+         aegis::ui::ThemeEngine::COLOR_TEXT,
+         aegis::ui::ThemeEngine::COLOR_TEXT));
+    connect(m_recenterBtn, &QPushButton::clicked,
+            this, &MapViewPlugin::onRecenterClicked);
+    toolbar->addWidget(m_recenterBtn);
+
+    // Status label for suspended indicator
+    m_statusLabel = new QLabel();
+    m_statusLabel->setStyleSheet(QStringLiteral(
+        "color: %1; padding: 4px; font-size: 11px; font-weight: bold;"
+    ).arg(aegis::ui::ThemeEngine::COLOR_WARNING));
+    toolbar->addWidget(m_statusLabel);
+
     toolbar->addWidget(m_coordLabel);
     vbox->addLayout(toolbar);
 
@@ -99,13 +153,12 @@ void MapViewPlugin::buildUi() {
 
     m_scene = new QGraphicsScene(this);
     m_view->setScene(m_scene);
+
+    // Detect manual pan
+    m_view->viewport()->installEventFilter(this);
 }
 
 void MapViewPlugin::setupScene() {
-    if (!m_network) {
-        m_network = new QNetworkAccessManager(this);
-    }
-
     const qreal sceneExtent = TILE_SIZE * (TILE_RADIUS * 2 + 3);
     m_scene->setSceneRect(-sceneExtent / 2, -sceneExtent / 2, sceneExtent, sceneExtent);
     m_scene->setBackgroundBrush(QBrush(QColor(aegis::ui::ThemeEngine::COLOR_BACKGROUND)));
@@ -153,7 +206,6 @@ void MapViewPlugin::onPositionChanged(const core::types::PositionData& data) {
     }
 
     updateVehicleMarker(lat, lon, hdg);
-    fitViewToVehicle();
     updateVisibleTiles();
 
     // Update track polyline
@@ -167,6 +219,11 @@ void MapViewPlugin::onPositionChanged(const core::types::PositionData& data) {
         }
     }
     m_trackLine->setPath(path);
+
+    // Feed target to follow-vehicle controller (it decides whether to pan)
+    if (m_followController) {
+        m_followController->setTarget(latLonToScene(lat, lon));
+    }
 
     QString coordText = QStringLiteral("Lat: %1  Lon: %2")
                             .arg(lat, 0, 'f', 6)
@@ -217,7 +274,7 @@ QRectF MapViewPlugin::visibleSceneRect() const {
 }
 
 void MapViewPlugin::updateVisibleTiles() {
-    if (!m_scene || !m_network) return;
+    if (!m_scene || !m_tileLoader) return;
 
     const QRectF viewport = visibleSceneRect();
     if (viewport.isEmpty()) return;
@@ -225,21 +282,25 @@ void MapViewPlugin::updateVisibleTiles() {
     const QPointF centerWorld = latLonToWorldPixel(m_centerLat, m_centerLon);
     const QRect range = map_math::visibleTileRange(viewport, centerWorld, m_zoom, TILE_SIZE);
 
+    QSet<QString> newVisible;
     // Request tiles in the visible range
     for (int x = range.left(); x <= range.right(); ++x) {
         for (int y = range.top(); y <= range.bottom(); ++y) {
+            QString key = tileKey(x, y);
+            newVisible.insert(key);
             requestTile(x, y);
         }
     }
+    m_visibleTileKeys = newVisible;
 
     // Remove tiles that are well outside the visible area
     removeOffscreenTiles(viewport);
+    updateTileReadiness();
 }
 
 void MapViewPlugin::removeOffscreenTiles(const QRectF& viewport) {
     if (!m_scene) return;
 
-    // Margin of 2 tiles to avoid thrashing during small pans
     const qreal margin = TILE_SIZE * 2.0;
     const QRectF marginRect = viewport.adjusted(-margin, -margin, margin, margin);
 
@@ -250,7 +311,10 @@ void MapViewPlugin::removeOffscreenTiles(const QRectF& viewport) {
         if (!marginRect.intersects(tileRect)) {
             m_scene->removeItem(item);
             delete item;
+            QString key = it.key();
             it = m_tileItems.erase(it);
+            m_loadedTileKeys.remove(key);
+            m_visibleTileKeys.remove(key);
         } else {
             ++it;
         }
@@ -258,25 +322,30 @@ void MapViewPlugin::removeOffscreenTiles(const QRectF& viewport) {
 }
 
 void MapViewPlugin::updateTiles() {
-    if (!m_scene || !m_network) return;
+    if (!m_scene || !m_tileLoader) return;
 
     const QPointF center = latLonToWorldPixel(m_centerLat, m_centerLon);
     const int centerTileX = qFloor(center.x() / TILE_SIZE);
     const int centerTileY = qFloor(center.y() / TILE_SIZE);
     const int maxTile = (1 << m_zoom) - 1;
 
+    QSet<QString> newVisible;
     for (int dx = -TILE_RADIUS; dx <= TILE_RADIUS; ++dx) {
         for (int dy = -TILE_RADIUS; dy <= TILE_RADIUS; ++dy) {
             const int tileX = centerTileX + dx;
             const int tileY = centerTileY + dy;
             if (tileX < 0 || tileX > maxTile || tileY < 0 || tileY > maxTile) continue;
+            QString key = tileKey(tileX, tileY);
+            newVisible.insert(key);
             requestTile(tileX, tileY);
         }
     }
+    m_visibleTileKeys = newVisible;
+    updateTileReadiness();
 }
 
 void MapViewPlugin::requestTile(int x, int y) {
-    const QString key = QStringLiteral("%1/%2/%3").arg(m_zoom).arg(x).arg(y);
+    const QString key = tileKey(x, y);
     if (m_tileItems.contains(key)) {
         m_tileItems.value(key)->setPos(tileToScene(x, y));
         return;
@@ -289,13 +358,11 @@ void MapViewPlugin::requestTile(int x, int y) {
     placeholder->setZValue(0);
     m_tileItems.insert(key, placeholder);
 
-    const QUrl url(m_tileUrlTemplate.arg(m_zoom).arg(x).arg(y));
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::UserAgentHeader,
-                      QStringLiteral("AEGIS-GCS/0.1 (+https://github.com/aegis-gcs)"));
-    auto* reply = m_network->get(request);
-    reply->setProperty("tileKey", key);
-    connect(reply, &QNetworkReply::finished, this, &MapViewPlugin::onTileDownloaded);
+    aegis::map::TileCoord coord;
+    coord.z = m_zoom;
+    coord.x = x;
+    coord.y = y;
+    m_tileLoader->requestTile(coord);
 }
 
 void MapViewPlugin::fitViewToVehicle() {
@@ -317,32 +384,43 @@ void MapViewPlugin::applyZoom(int newZoom) {
     if (newZoom == m_zoom) return;
     m_zoom = newZoom;
 
-    // 1. Remove all tile items (but keep vehicle, track, crosshair)
+    // 1. Cancel pending tile requests and remove tile items
     for (auto* item : m_tileItems) {
         m_scene->removeItem(item);
         delete item;
     }
     m_tileItems.clear();
+    m_visibleTileKeys.clear();
+    m_loadedTileKeys.clear();
 
-    // 2. Remove heading line (will be recreated by updateVehicleMarker)
+    // 2. Remove heading line
     if (m_headingLine) {
         m_scene->removeItem(m_headingLine);
         delete m_headingLine;
         m_headingLine = nullptr;
     }
 
-    // 3. Update scene extent for new zoom
+    // 3. Update scene extent
     const qreal sceneExtent = TILE_SIZE * (TILE_RADIUS * 2 + 3);
     m_scene->setSceneRect(-sceneExtent / 2, -sceneExtent / 2, sceneExtent, sceneExtent);
 
-    // 4. Reposition vehicle marker + heading with new zoom math
+    // 4. Update viewport for TileLoader
+    aegis::map::ViewportInfo vp;
+    vp.zoom = m_zoom;
+    if (m_view) {
+        vp.widthPx = m_view->viewport()->width();
+        vp.heightPx = m_view->viewport()->height();
+    }
+    m_tileLoader->setViewport(vp);
+
+    // 5. Reposition vehicle
     if (m_hasFix) {
         QPointF pos = latLonToScene(m_lastLat, m_lastLon);
         m_vehicleMarker->setPos(pos);
         updateVehicleMarker(m_lastLat, m_lastLon, m_lastHeading);
     }
 
-    // 5. Recompute track line with new zoom (reproject all historical points)
+    // 6. Recompute track line
     QPainterPath path;
     if (!m_trackHistoryLatLon.isEmpty()) {
         path.moveTo(latLonToScene(m_trackHistoryLatLon.first().first,
@@ -354,27 +432,77 @@ void MapViewPlugin::applyZoom(int newZoom) {
     }
     m_trackLine->setPath(path);
 
-    // 6. Load tiles at new zoom
+    // 7. Load tiles at new zoom
     updateTiles();
-    if (m_hasFix) fitViewToVehicle();
 }
 
-void MapViewPlugin::onTileDownloaded() {
-    auto* reply = qobject_cast<QNetworkReply*>(sender());
-    if (!reply) return;
-
-    const QString key = reply->property("tileKey").toString();
-    if (reply->error() == QNetworkReply::NoError && m_tileItems.contains(key)) {
-        QPixmap pixmap;
-        pixmap.loadFromData(reply->readAll());
-        if (!pixmap.isNull()) {
-            m_tileItems.value(key)->setPixmap(pixmap);
-        }
-    } else if (reply->error() != QNetworkReply::NoError) {
-        qWarning() << "[MapView] Tile download failed:" << reply->url() << reply->errorString();
+void MapViewPlugin::onTileReady(const aegis::map::TileCoord& coord, const QPixmap& pixmap) {
+    QString key = tileKey(coord.x, coord.y);
+    if (m_tileItems.contains(key)) {
+        m_tileItems.value(key)->setPixmap(pixmap);
     }
+    m_loadedTileKeys.insert(key);
+    updateTileReadiness();
+}
 
-    reply->deleteLater();
+void MapViewPlugin::onTileFailed(const aegis::map::TileCoord& coord, const QString& error) {
+    Q_UNUSED(error)
+    QString key = tileKey(coord.x, coord.y);
+    // Mark as "loaded" with the placeholder so we don't suspend forever on a permanent failure
+    m_loadedTileKeys.insert(key);
+    updateTileReadiness();
+}
+
+void MapViewPlugin::updateTileReadiness() {
+    if (m_visibleTileKeys.isEmpty()) {
+        publishTileReadiness(true);
+        return;
+    }
+    bool allLoaded = true;
+    for (const QString& key : m_visibleTileKeys) {
+        if (!m_loadedTileKeys.contains(key)) {
+            allLoaded = false;
+            break;
+        }
+    }
+    if (m_followController) {
+        m_followController->setViewportFullyLoaded(allLoaded);
+    }
+    publishTileReadiness(allLoaded);
+}
+
+void MapViewPlugin::publishTileReadiness(bool ready) {
+    if (!m_bus) return;
+    m_bus->publish(QStringLiteral("map/tilesReady"), QVariant(ready));
+}
+
+void MapViewPlugin::onFollowStateChanged(FollowState state) {
+    if (!m_recenterBtn || !m_statusLabel) return;
+
+    switch (state) {
+    case FollowState::Active:
+        m_recenterBtn->setVisible(false);
+        m_statusLabel->setText(QString());
+        break;
+    case FollowState::Suspended:
+        m_recenterBtn->setVisible(false);
+        m_statusLabel->setText(tr("LOADING TILES..."));
+        break;
+    case FollowState::Disabled:
+        m_recenterBtn->setVisible(true);
+        m_statusLabel->setText(QString());
+        break;
+    }
+}
+
+void MapViewPlugin::onRecenterClicked() {
+    if (m_followController) {
+        m_followController->requestRecenter();
+    }
+}
+
+QString MapViewPlugin::tileKey(int x, int y) const {
+    return QStringLiteral("%1/%2/%3").arg(m_zoom).arg(x).arg(y);
 }
 
 } // namespace aegis::plugins

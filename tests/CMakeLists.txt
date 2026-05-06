@@ -117,3 +117,12 @@ add_executable(test_tile_loader
 target_link_libraries(test_tile_loader PRIVATE
     aegis_map Qt6::Core Qt6::Network Qt6::Test GTest::gtest_main)
 add_test(NAME TileLoader COMMAND test_tile_loader)
+
+add_executable(test_follow_vehicle
+    plugins/map_view/test_follow_vehicle.cpp
+    ../src/plugins/map_view/follow_vehicle_controller.cpp
+)
+target_include_directories(test_follow_vehicle PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_follow_vehicle PRIVATE
+    Qt6::Core Qt6::Widgets Qt6::Test GTest::gtest_main)
+add_test(NAME FollowVehicle COMMAND test_follow_vehicle)
