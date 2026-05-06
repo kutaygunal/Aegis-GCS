@@ -99,3 +99,20 @@ completed_tasks:
       Added AddressSanitizer job on Linux with -Werror enabled.
       Replay regression corpus added at tests/data/replay/corpus.tlog (7 MAVLink messages).
       Total test suite: 12 test targets, 71 unit/integration tests.
+
+  - id: P1-007
+    phase: P1
+    title: Dynamic map tile loading for off-center viewport
+    priority: high
+    area: map
+    risk: medium
+    status: done
+    depends_on: []
+    notes: >
+      Extracted pure Web-Mercator tile math into header-only `map_math.hpp` namespace.
+      Added `updateVisibleTiles()` to compute visible tile range from QGraphicsView viewport
+      and request missing tiles dynamically as the vehicle moves. Added `removeOffscreenTiles()`
+      with a 2-tile margin to prevent memory growth. Hooked tile refresh into every
+      `onPositionChanged()` after `fitViewToVehicle()`. Preserved zoom in/out behavior.
+      Added 5 unit tests for tile math (SF tile, boundaries, viewport range, clamping,
+      offset center, equator). Build passes cleanly. Tests will execute in CI (GTest required).

@@ -5,41 +5,10 @@
 ---
 
 # ═══════════════════════════════════════════════════════════════
-# SPRINT 1 — Reliability Core (remaining)
+# SPRINT 2 — Safety Core
 # ═══════════════════════════════════════════════════════════════
 
 tasks:
-
-  - id: P1-007
-    phase: P1
-    title: Dynamic map tile loading for off-center viewport
-    priority: high
-    area: map
-    risk: medium
-    depends_on: []
-    acceptance:
-      - The map plugin computes which tiles are visible in the current QGraphicsView viewport.
-      - As the vehicle moves or the view pans, missing tiles for newly visible areas are requested and rendered.
-      - No black/empty gaps appear when the drone moves outside the initially loaded tile set.
-      - Zoom in/out still clears and rebuilds the tile set correctly.
-      - Tile requests are deduplicated; already-loaded or in-flight tiles are not re-requested.
-      - The implementation does not block the main thread; tiles load asynchronously via QNetworkAccessManager.
-      - Map remains usable with dummy telemetry generator moving across tile boundaries.
-    implementation_rules:
-      - Hook into the view change event (e.g., scroll, resize, vehicle-position-driven centering) to trigger tile updates.
-      - Compute visible tile range from the current view rect and scene transform, not just from the initial center lat/lon.
-      - Keep the existing TILE_RADIUS logic or replace it with viewport-based visibility; either way, only load tiles that are actually visible plus a small prefetch margin.
-      - Preserve existing tile caching in m_tileItems to avoid re-requesting already loaded tiles.
-      - Do not break zoom in/out behavior; ensure m_centerLat/m_centerLon stays coherent with the view center.
-      - Add a lightweight unit test for the tile-visibility math (scene rect -> tile x/y range) without requiring network.
-    test_commands:
-      - cmake --build build --config Release
-      - ctest --test-dir build --output-on-failure
-    status: ready
-
-# ═══════════════════════════════════════════════════════════════
-# SPRINT 2 — Safety Core
-# ═══════════════════════════════════════════════════════════════
 
   - id: P2-001
     phase: P2
@@ -63,7 +32,7 @@ tasks:
     test_commands:
       - cmake --build build --config Release
       - ctest --test-dir build --output-on-failure
-    status: planned
+    status: ready
 
   - id: P2-002
     phase: P2
