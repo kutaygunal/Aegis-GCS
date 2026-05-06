@@ -56,6 +56,7 @@ endif()
 
 # ── Core library ──────────────────────────────────────────────────────
 add_subdirectory(src/core)
+add_subdirectory(src/map)
 add_subdirectory(src/telemetry)
 add_subdirectory(src/ui)
 add_subdirectory(src/utils)
@@ -70,6 +71,7 @@ add_executable(aegis
 
 target_link_libraries(aegis PRIVATE
     aegis_core
+    aegis_map
     aegis_telemetry
     aegis_ui
     aegis_utils

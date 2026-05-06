@@ -27,6 +27,12 @@
     "diagnostics": {
         "exportPath": "aegis-diagnostics.zip"
     },
+    "map": {
+        "tileUrlTemplate": "https://tile.openstreetmap.org/%1/%2/%3.png",
+        "tileCacheSizeMB": 256,
+        "maxConcurrentDownloads": 6,
+        "maxRetries": 2
+    },
     "plugins": {
         "aegis.plugins.telemetry_hud": {},
         "aegis.plugins.alert_console": {

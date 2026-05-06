@@ -103,3 +103,17 @@ add_executable(test_map_math
 target_include_directories(test_map_math PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(test_map_math PRIVATE Qt6::Core GTest::gtest_main)
 add_test(NAME MapMath COMMAND test_map_math)
+
+add_executable(test_tile_cache
+    map/test_tile_cache.cpp
+)
+target_link_libraries(test_tile_cache PRIVATE
+    aegis_map Qt6::Core Qt6::Test GTest::gtest_main)
+add_test(NAME TileCache COMMAND test_tile_cache)
+
+add_executable(test_tile_loader
+    map/test_tile_loader.cpp
+)
+target_link_libraries(test_tile_loader PRIVATE
+    aegis_map Qt6::Core Qt6::Network Qt6::Test GTest::gtest_main)
+add_test(NAME TileLoader COMMAND test_tile_loader)

@@ -39,6 +39,8 @@ phases:
       - Rotating file logger with diagnostic bundle ZIP export
       - JSON config schema validation + versioned migration
       - GitHub Actions: clang-tidy, AddressSanitizer, replay regression
+      - Performant map tile loading (async, priority queue, LRU cache)
+      - Vehicle-centered follow mode with tile-load awareness
 
   - id: P2
     name: "Sprint 2 — Safety Core"

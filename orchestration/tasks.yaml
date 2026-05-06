@@ -4,11 +4,76 @@
 
 ---
 
+tasks:
+
+# ═══════════════════════════════════════════════════════════════
+# SPRINT 1 — Reliability Core (additions)
+# ═══════════════════════════════════════════════════════════════
+
+  - id: P1-008
+    phase: P1
+    title: Performant map tile loading
+    priority: high
+    area: map
+    risk: medium
+    depends_on: [P1-007]
+    acceptance:
+      - Tile network requests run on a background thread pool (not the UI thread).
+      - Concurrent tile downloads are bounded (configurable, default 6 parallel requests).
+      - Tiles are prioritized by distance to the viewport center — center tiles load first.
+      - Tiles that scroll off-screen before the response arrives are cancelled, not queued.
+      - Successfully loaded tiles are stored in an in-memory LRU cache (configurable size, default 256 MB).
+      - Cache hits skip the network entirely; cache eviction is LRU by byte size.
+      - Failed tile downloads are retried up to a configurable max (default 2) with exponential backoff.
+      - Permanent failures (4xx) are not retried; they are reported to the map layer.
+      - A tile readiness signal is emitted per tile so the map can repaint incrementally instead of blocking.
+      - Tile loading performance metrics (hit/miss ratio, avg latency, failure rate) are observable via TelemetryBus for diagnostics.
+    implementation_rules:
+      - Use QThreadPool + QRunnable or QtConcurrent for background fetch; do not block the scene thread.
+      - Priority queue must be updated on every viewport change (pan/zoom) — stale center-based priorities are discarded.
+      - LRU cache must be thread-safe (read from UI, write from fetch threads).
+      - Expose tile-cache and concurrency knobs via config JSON under "map" domain.
+      - Keep TileLoader decoupled from QGraphicsView; it only knows tile coords and emits signals.
+      - Add unit tests for priority ordering, cancellation, backoff, cache hit/miss, eviction, and concurrency limit.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: done
+    notes: TileLoader with LRU cache, priority queue, concurrency limit, retry/cancel, metrics. 13/13 new tests pass. Not yet wired into map_view plugin.
+    status: ready
+
+  - id: P1-009
+    phase: P1
+    title: Vehicle-centered view with tile-load awareness
+    priority: high
+    area: map
+    risk: medium
+    depends_on: [P1-008]
+    acceptance:
+      - When the vehicle is moving, the map view continuously centers on the vehicle position (follow-vehicle mode).
+      - Centering uses smooth interpolation (interpolated pan) to prevent jarring jumps.
+      - When a visible tile fails to load (network error, timeout, or 4xx), the view stops re-centering on the vehicle.
+      - The view resumes follow-vehicle mode only after all visible tiles within the viewport have loaded successfully.
+      - A visual indicator (e.g., pulsing border or icon) is shown when follow-vehicle is suspended due to missing tiles.
+      - The user can manually re-enable follow-vehicle mode via a button; it will again suspend if tiles are still missing.
+      - If the user manually pans the map, follow-vehicle mode is disabled; a re-center button appears to resume it.
+      - Tile readiness state is tracked per visible tile; the view queries this state before each centering update.
+      - A "tiles loaded" flag is published on TelemetryBus so other systems (recording, HUD) know the map is visually complete.
+    implementation_rules:
+      - Follow-vehicle state machine: ACTIVE → SUSPENDED (tile missing) or DISABLED (user pan). Re-enable only on user action or tile load recovery.
+      - Do not freeze the view position to a partially loaded area; when centering is suspended, keep the last good center.
+      - Smooth interpolation can use QTimer-based lerp on the view center; no physics engine dependency.
+      - Tile readiness queries go through TileLoader (P1-008), not directly to network.
+      - Keep the follow-vehicle controller in the map plugin, not in core telemetry — it is a UI concern.
+      - Add unit tests for state transitions (active→suspended→active, active→disabled→active), smooth interpolation math, and tile-readiness gating.
+    test_commands:
+      - cmake --build build --config Release
+      - ctest --test-dir build --output-on-failure
+    status: planned
+
 # ═══════════════════════════════════════════════════════════════
 # SPRINT 2 — Safety Core
 # ═══════════════════════════════════════════════════════════════
-
-tasks:
 
   - id: P2-001
     phase: P2
