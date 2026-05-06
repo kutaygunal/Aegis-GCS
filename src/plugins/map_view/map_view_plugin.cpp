@@ -1,4 +1,5 @@
 #include "map_view_plugin.hpp"
+#include "map_math.hpp"
 #include "core/bus/telemetry_bus.hpp"
 #include "core/state/vehicle_state.hpp"
 #include "ui/theme/theme_engine.hpp"
@@ -144,7 +145,6 @@ void MapViewPlugin::onPositionChanged(const core::types::PositionData& data) {
         m_centerLat = lat;
         m_centerLon = lon;
         m_hasFix = true;
-        updateTiles();
     }
 
     m_trackHistory.append(latLonToScene(lat, lon));
@@ -153,6 +153,8 @@ void MapViewPlugin::onPositionChanged(const core::types::PositionData& data) {
     }
 
     updateVehicleMarker(lat, lon, hdg);
+    fitViewToVehicle();
+    updateVisibleTiles();
 
     // Update track polyline
     QPainterPath path;
@@ -163,8 +165,6 @@ void MapViewPlugin::onPositionChanged(const core::types::PositionData& data) {
         }
     }
     m_trackLine->setPath(path);
-
-    fitViewToVehicle();
 
     QString coordText = QStringLiteral("Lat: %1  Lon: %2")
                             .arg(lat, 0, 'f', 6)
@@ -201,19 +201,58 @@ QPointF MapViewPlugin::latLonToScene(qreal lat, qreal lon) const {
 }
 
 QPointF MapViewPlugin::latLonToWorldPixel(qreal lat, qreal lon) const {
-    const qreal clampedLat = qBound(-85.05112878, lat, 85.05112878);
-    const qreal sinLat = qSin(qDegreesToRadians(clampedLat));
-    const qreal mapSize = static_cast<qreal>(TILE_SIZE) * (1 << m_zoom);
-
-    constexpr qreal PI = 3.14159265358979323846;
-    const qreal x = (lon + 180.0) / 360.0 * mapSize;
-    const qreal y = (0.5 - qLn((1.0 + sinLat) / (1.0 - sinLat)) / (4.0 * PI)) * mapSize;
-    return QPointF(x, y);
+    return map_math::latLonToWorldPixel(lat, lon, m_zoom, TILE_SIZE);
 }
 
 QPointF MapViewPlugin::tileToScene(int x, int y) const {
     const QPointF center = latLonToWorldPixel(m_centerLat, m_centerLon);
     return QPointF(x * TILE_SIZE - center.x(), y * TILE_SIZE - center.y());
+}
+
+QRectF MapViewPlugin::visibleSceneRect() const {
+    if (!m_view) return QRectF();
+    return m_view->mapToScene(m_view->viewport()->rect()).boundingRect();
+}
+
+void MapViewPlugin::updateVisibleTiles() {
+    if (!m_scene || !m_network) return;
+
+    const QRectF viewport = visibleSceneRect();
+    if (viewport.isEmpty()) return;
+
+    const QPointF centerWorld = latLonToWorldPixel(m_centerLat, m_centerLon);
+    const QRect range = map_math::visibleTileRange(viewport, centerWorld, m_zoom, TILE_SIZE);
+
+    // Request tiles in the visible range
+    for (int x = range.left(); x <= range.right(); ++x) {
+        for (int y = range.top(); y <= range.bottom(); ++y) {
+            requestTile(x, y);
+        }
+    }
+
+    // Remove tiles that are well outside the visible area
+    removeOffscreenTiles(viewport);
+}
+
+void MapViewPlugin::removeOffscreenTiles(const QRectF& viewport) {
+    if (!m_scene) return;
+
+    // Margin of 2 tiles to avoid thrashing during small pans
+    const qreal margin = TILE_SIZE * 2.0;
+    const QRectF marginRect = viewport.adjusted(-margin, -margin, margin, margin);
+
+    auto it = m_tileItems.begin();
+    while (it != m_tileItems.end()) {
+        QGraphicsPixmapItem* item = it.value();
+        const QRectF tileRect(item->pos(), QSizeF(TILE_SIZE, TILE_SIZE));
+        if (!marginRect.intersects(tileRect)) {
+            m_scene->removeItem(item);
+            delete item;
+            it = m_tileItems.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void MapViewPlugin::updateTiles() {
