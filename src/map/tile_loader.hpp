@@ -43,7 +43,7 @@ signals:
     void metricsUpdated(const TileMetrics& metrics);
 
 private slots:
-    void onReplyFinished();
+    void onReplyFinished(QNetworkReply* reply);
     void processQueue();
 
 private:

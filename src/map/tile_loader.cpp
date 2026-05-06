@@ -145,8 +145,7 @@ void TileLoader::startDownload(const TileCoord& coord) {
     m_active.insert(coord, reply);
 }
 
-void TileLoader::onReplyFinished() {
-    auto* reply = qobject_cast<QNetworkReply*>(sender());
+void TileLoader::onReplyFinished(QNetworkReply* reply) {
     if (!reply) return;
 
     const TileCoord coord = reply->property("aegisTileCoord").value<TileCoord>();
