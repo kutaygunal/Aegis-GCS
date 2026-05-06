@@ -92,7 +92,7 @@ bool SimpleZipWriter::addData(const QByteArray& data, const QString& archiveName
     const quint64 offset = m_file.pos();
 
     if (!writeLocalHeader(archiveName, crc, size)) return false;
-    if (m_stream.writeRawData(data.constData(), size) != size) return false;
+    if (m_stream.writeRawData(data.constData(), static_cast<int>(size)) != static_cast<int>(size)) return false;
 
     m_entries.push_back({archiveName, crc, size, offset});
     return true;

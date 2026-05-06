@@ -27,7 +27,7 @@ public:
      * @brief Called once when the plugin is loaded into the shell.
      * @param bus   The global telemetry pub/sub bus.
      * @param state The canonical vehicle state model.
-     * @param config Key/value configuration from config/*.json.
+     * @param config Key/value configuration from config files (*.json).
      * @return true on success; on false, the plugin will be unloaded.
      */
     virtual bool initialize(TelemetryBus* bus, VehicleState* state,

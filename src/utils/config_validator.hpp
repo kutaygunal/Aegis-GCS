@@ -11,14 +11,14 @@ namespace aegis::utils {
  * @brief Describes a single config key validation rule.
  */
 struct SchemaRule {
-    QString key;              ///< Key name (e.g., "bindPort")
-    QString type;             ///< "string", "int", "bool", "double", "array", "object"
-    bool required = false;    ///< If true, missing key emits a warning
-    QVariant defaultValue;    ///< Value used when key is missing or invalid
-    QVariant min;             ///< Minimum for int/double (inclusive)
-    QVariant max;             ///< Maximum for int/double (inclusive)
-    QStringList allowed;      ///< Allowed string values (empty = any string)
-    QMap<QString, SchemaRule> nested; ///< Child rules for "object" type
+    QString key = {};              ///< Key name (e.g., "bindPort")
+    QString type = {};             ///< "string", "int", "bool", "double", "array", "object"
+    bool required = false;         ///< If true, missing key emits a warning
+    QVariant defaultValue = {};    ///< Value used when key is missing or invalid
+    QVariant min = {};             ///< Minimum for int/double (inclusive)
+    QVariant max = {};             ///< Maximum for int/double (inclusive)
+    QStringList allowed = {};      ///< Allowed string values (empty = any string)
+    QMap<QString, SchemaRule> nested = {}; ///< Child rules for "object" type
 };
 
 /**
