@@ -292,19 +292,6 @@ config/aegis.json
 
 ---
 
-## Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| `Qt6 not found` | Set `-DCMAKE_PREFIX_PATH` to your Qt installation |
-| `Discovered 0 plugins` | Verify `Release/plugins/*.dll` exists and `config/aegis.json` is not pointing only at the wrong folder |
-| App opens but plugins are missing | Launch the executable from the build output directory and ensure plugin DLLs are next to it in `plugins/` |
-| `LNK1104 cannot open aegis.exe` | Close the running app before rebuilding |
-| `Qt6WebEngineWidgets not found` | Safe to ignore for the current native map implementation |
-| Blank center panel | Rebuild after config/layout fixes; the active implementation now injects the map as the main central widget |
-
----
-
 ## MAVLink Coverage
 
 The parser currently decodes the following MAVLink 2 messages:
