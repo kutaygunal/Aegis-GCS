@@ -1,18 +1,30 @@
-# AEGIS GCS
+<div align="center">
 
-**A**erospace **E**xtensible **G**round **C**ontrol **S**tation — a modular, C++/Qt6-based operator platform for UAS telemetry, mission planning, and real-time visualization.
+# 🛰️ AEGIS GCS
+
+**A**erospace **E**xtensible **G**round **C**ontrol **S**tation
+
+A modular, C++/Qt6-based operator platform for UAS telemetry, mission planning, and real-time visualization.
+
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white)](https://isocpp.org/)
+[![Qt6](https://img.shields.io/badge/Qt-6-41CD52?style=for-the-badge&logo=qt&logoColor=white)](https://www.qt.io/)
+[![CMake](https://img.shields.io/badge/CMake-064F8C?style=for-the-badge&logo=cmake&logoColor=white)](https://cmake.org/)
+[![MAVLink](https://img.shields.io/badge/MAVLink-2-0A66C2?style=for-the-badge&logo=drone&logoColor=white)](https://mavlink.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
 > Portfolio project focused on plugin architecture, telemetry flow, and desktop operator tooling.
 
+</div>
+
 ---
 
-## Overview
+## 📖 Overview
 
 AEGIS GCS is a **desktop Ground Control Station** written in **C++20** with **Qt6 Widgets**. It ingests MAVLink telemetry over UDP, maintains a thread-safe shared vehicle state model, and exposes functionality through **runtime-loaded plugins** using `QPluginLoader`.
 
 ![AEGIS GCS Screenshot](ScreenShot.png)
 
-### Current implemented capabilities
+### ✅ Current implemented capabilities
 
 - Runtime plugin discovery and loading
 - Telemetry HUD plugin
@@ -25,7 +37,7 @@ AEGIS GCS is a **desktop Ground Control Station** written in **C++20** with **Qt
 - Windows Qt runtime deployment via `windeployqt`
 - Growing unit and integration test suite (GoogleTest + Qt Test)
 
-### Current map implementation
+### 🗺️ Current map implementation
 
 The map plugin currently uses a **native Qt `QGraphicsView` / `QGraphicsScene` 2D map view**.
 
@@ -33,11 +45,11 @@ The map plugin currently uses a **native Qt `QGraphicsView` / `QGraphicsScene` 2
 - It shows a grid, vehicle marker, heading line, and track history
 - It is injected as the **main central view** in the application shell
 
-`Qt WebEngine` / `Cesium` is **not the active map path today**. It is still a future enhancement.
+> ⚠️ **Note:** `Qt WebEngine` / `Cesium` is **not** the active map path today. It is still a future enhancement.
 
 ---
 
-## Architecture at a Glance
+## 🏗️ Architecture at a Glance
 
 ```text
 ┌────────────────────────────────────────────────────────────┐
@@ -63,7 +75,7 @@ The map plugin currently uses a **native Qt `QGraphicsView` / `QGraphicsScene` 2
 └────────────────────────────────────────────────────────────┘
 ```
 
-### Telemetry Pipeline
+### 🔄 Telemetry Pipeline
 
 Live MAVLink frames flow through a dedicated worker thread and are delivered to the main thread via Qt queued connections:
 
@@ -71,11 +83,11 @@ Live MAVLink frames flow through a dedicated worker thread and are delivered to 
 UDP Socket → MavlinkIO → MavlinkParser → VehicleState + TelemetryBus → UI/Plugins
 ```
 
-**Important design decision:** socket bind success is **not** treated as a vehicle connection. A vehicle is considered connected only after a valid MAVLink heartbeat is received. If no heartbeat arrives within the configured timeout, the system emits disconnected.
+> 💡 **Important design decision:** socket bind success is **not** treated as a vehicle connection. A vehicle is considered connected only after a valid MAVLink heartbeat is received. If no heartbeat arrives within the configured timeout, the system emits disconnected.
 
 ---
 
-## Tech Stack
+## 🧰 Tech Stack
 
 | Layer | Technology |
 |---|---|
@@ -93,7 +105,7 @@ UDP Socket → MavlinkIO → MavlinkParser → VehicleState + TelemetryBus → U
 
 ---
 
-## Repository Structure
+## 📁 Repository Structure
 
 ```text
 aegis-gcs/
@@ -189,7 +201,7 @@ aegis-gcs/
 
 ---
 
-## Build and Run
+## 🔨 Build and Run
 
 ### Requirements
 
@@ -201,7 +213,7 @@ aegis-gcs/
 | Qt WebEngine | Optional, not required for current map plugin |
 | GoogleTest | Optional |
 
-### Windows (Visual Studio 2022)
+### 🪟 Windows (Visual Studio 2022)
 
 ```powershell
 cmake -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.8.2/msvc2022_64" -DAEGIS_BUILD_TESTS=OFF
@@ -217,7 +229,7 @@ cmake --build build_cesium --config Release --parallel
 .\build_cesium\Release\aegis.exe
 ```
 
-#### One-shot clean + build script
+#### ⚡ One-shot clean + build script
 
 For convenience, run the provided `build.bat` to clean all old artifacts and build a fresh Release in one step. It auto-detects Visual Studio 2022 and Qt — you can double-click it directly from Explorer:
 
@@ -239,9 +251,9 @@ What it does:
 5. Builds the project in parallel
 6. Prints a summary confirming `aegis.exe` was produced
 
-> The script will **pause** at the end so you can read the output, even if the build fails.
+> ⏸️ The script will **pause** at the end so you can read the output, even if the build fails.
 
-### Linux
+### 🐧 Linux
 
 ```bash
 cmake -B build -S . -GNinja -DCMAKE_BUILD_TYPE=Release -DAEGIS_BUILD_TESTS=OFF
@@ -249,7 +261,7 @@ cmake --build build --parallel
 ./build/aegis
 ```
 
-### macOS
+### 🍎 macOS
 
 ```bash
 cmake -B build -S . -DCMAKE_PREFIX_PATH=$(brew --prefix qt@6) -DCMAKE_BUILD_TYPE=Release -DAEGIS_BUILD_TESTS=OFF
@@ -257,7 +269,7 @@ cmake --build build --parallel
 ./build/aegis
 ```
 
-### Building with Tests
+### 🧪 Building with Tests
 
 ```powershell
 cmake -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.8.2/msvc2022_64" -DAEGIS_BUILD_TESTS=ON
@@ -267,9 +279,9 @@ ctest --test-dir build --output-on-failure -C Release
 
 ---
 
-## Runtime Notes
+## ⚙️ Runtime Notes
 
-### Plugin loading
+### 🔌 Plugin loading
 
 The executable searches for plugins in this order:
 
@@ -289,14 +301,14 @@ or, for alternate build trees:
 build_cesium/Release/plugins/
 ```
 
-### Default startup behavior
+### 🚀 Default startup behavior
 
 - Map View is autostarted
 - Map View is shown as the **main center panel**
 - Dummy telemetry starts automatically for offline testing
 - Status bar shows connection + vehicle mode/armed state
 
-### Current UI Features
+### 🎛️ Current UI Features
 
 - Dark operator theme via `ThemeEngine`
 - File menu for opening replay logs
@@ -307,7 +319,7 @@ build_cesium/Release/plugins/
 
 ---
 
-## Configuration
+## ⚙️ Configuration
 
 Runtime configuration lives in:
 
@@ -365,7 +377,7 @@ config/aegis.json
 
 ---
 
-## MAVLink Coverage
+## 📡 MAVLink Coverage
 
 The parser currently decodes the following MAVLink 2 messages:
 
@@ -378,7 +390,9 @@ The parser currently decodes the following MAVLink 2 messages:
 | `MISSION_CURRENT` | Current mission index |
 | `STATUSTEXT` | Alert severity mapping and alert console output |
 
-## Map Implementation Details
+---
+
+## 🗺️ Map Implementation Details
 
 The map plugin uses native Qt graphics (no embedded browser):
 
@@ -411,9 +425,12 @@ The map plugin uses native Qt graphics (no embedded browser):
 │  └────────────────────────────────┘ │
 └──────────────────────────────────────┘
 ```
-> **Operational note:** OSM tile usage requires respecting the OpenStreetMap tile policy. A commercial deployment should add tile caching, provider attribution, rate limiting, and preferably a dedicated commercial tile provider or offline MBTiles support.
 
-## Testing
+> ⚠️ **Operational note:** OSM tile usage requires respecting the OpenStreetMap tile policy. A commercial deployment should add tile caching, provider attribution, rate limiting, and preferably a dedicated commercial tile provider or offline MBTiles support.
+
+---
+
+## 🧪 Testing
 
 Current automated test targets (73+ tests across all suites):
 
@@ -435,7 +452,9 @@ Current automated test targets (73+ tests across all suites):
 | `test_follow_vehicle` | State machine transitions, smooth interpolation, tile gating |
 | `test_map_math` | Lat/lon to tile/scene coordinate conversions |
 
-## Plugin Development
+---
+
+## 🧩 Plugin Development
 
 Plugins are shared libraries implementing `IPlugin`.
 
@@ -458,7 +477,7 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 
 ---
 
-## Commercial-Grade Readiness Snapshot
+## 🏭 Commercial-Grade Readiness Snapshot
 
 | Area | Current State | Commercial Next Step |
 |---|---|---|
@@ -469,7 +488,7 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 | Testing | Growing unit/integration test suite | Add fuzzing, UI smoke tests, sanitizers, replay regression corpus, and hardware-in-loop tests |
 | Deployment | Build and Windows runtime deployment scaffold | Add installer, updater, crash reporter, license management, and diagnostics export |
 
-## Current Limitations
+## ⚠️ Current Limitations
 
 - The map uses native Qt/OpenStreetMap raster tiles, not a 3D globe or Cesium bridge
 - Online map tiles require network access unless an offline cache/provider is added
@@ -479,9 +498,9 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 
 ---
 
-## Roadmap
+## 🗺️ Roadmap
 
-### Completed Foundation
+### ✅ Completed Foundation
 
 - [x] Qt6/C++20 project scaffold
 - [x] Runtime plugin architecture
@@ -495,7 +514,7 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 - [x] CI hardening (clang-tidy, AddressSanitizer, replay regression)
 - [x] Initial parser/replay/UDP test coverage (73+ tests)
 
-### Phase 1 — Commercial-Grade Foundation (In Progress)
+### 🚧 Phase 1 — Commercial-Grade Foundation (In Progress)
 
 - [x] Formal connection state machine: socket bound, vehicle discovered, heartbeat alive, degraded, disconnected, reconnecting
 - [x] Config schema validation and migration system
@@ -508,7 +527,7 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 - [ ] Read-only/demo/operator modes separated from real control mode
 - [x] CI hardening with static analysis, sanitizers, and replay regression tests
 
-### Phase 2 — Real GCS Functionality
+### 🧭 Phase 2 — Real GCS Functionality
 
 - [ ] Full MAVLink mission protocol: download, upload, clear, partial update, ACK handling
 - [ ] Parameter protocol: download, edit, search/filter, diff, import/export
@@ -520,7 +539,7 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 - [ ] Telemetry graphing dashboard and event timeline
 - [ ] Export telemetry to CSV/JSON and generate flight reports
 
-### Phase 3 — Map and Navigation
+### 🗺️ Phase 3 — Map and Navigation
 
 - [x] Tile disk cache → in-memory LRU cache (TileLoader)
 - [ ] Offline maps and MBTiles support
@@ -532,7 +551,7 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 - [ ] No-fly zone and ADS-B/traffic overlays
 - [ ] Optional WebEngine/Cesium 3D globe integration
 
-### Phase 4 — UI/UX and Operator Workflow
+### 🎨 Phase 4 — UI/UX and Operator Workflow
 
 - [ ] Workspace presets: pilot, mission planner, diagnostics, replay analysis
 - [ ] Robust dock layout persistence and reset workflow
@@ -543,7 +562,7 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 - [ ] First-run setup wizard and vehicle/link setup wizard
 - [ ] High-DPI polish, theme customization, and accessibility pass
 
-### Phase 5 — Security and Enterprise Readiness
+### 🔐 Phase 5 — Security and Enterprise Readiness
 
 - [ ] User accounts and roles: viewer, operator, maintainer, admin
 - [ ] Permission system for vehicle commands and plugins
@@ -554,7 +573,7 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 - [ ] License activation, offline licensing, and edition gating
 - [ ] Installer, portable mode, and enterprise deployment profile
 
-### Phase 6 — Architecture and Extensibility
+### 🧱 Phase 6 — Architecture and Extensibility
 
 - [ ] Stable plugin SDK and plugin ABI/version compatibility checks
 - [ ] Service registry for plugins
@@ -565,7 +584,7 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 - [ ] Headless core mode for automation/integration testing
 - [ ] Remote API: WebSocket, REST, or gRPC
 
-### Phase 7 — Differentiators
+### 🚀 Phase 7 — Differentiators
 
 - [ ] AI-assisted diagnostics and anomaly detection
 - [ ] Mission risk scoring
@@ -575,6 +594,12 @@ On Windows, place the built plugin in the executable's `plugins/` directory.
 
 ---
 
-## License
+## 📄 License
 
 MIT
+
+---
+
+<div align="center">
+  Made with ❤️ for aerospace operators
+</div>
